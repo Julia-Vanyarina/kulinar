@@ -23,7 +23,7 @@ async function viewHolidays() {
   const past = all.filter((h) => h.date && daysUntil(h.date) < 0).sort((a, b) => b.date.localeCompare(a.date));
   const card = (h, i) => {
     const d = h.date ? dateObj(h.date) : null;
-    const T = CARD_THEMES[h.theme] || CARD_THEMES.aura;
+    const T = cardTheme(h.theme);
     const n = (h.items || []).length;
     return `<a class="hcard" href="#/holiday/${h.id}" style="--accent:${T.section};--hbg:${T.css || T.bg}">
       <div class="h-date">${d ? `<b>${d.getDate()}</b><span>${esc(d.toLocaleDateString('ru-RU', { month: 'short' }).replace('.', ''))}</span>` : '<b>?</b><span>дата</span>'}</div>
@@ -92,6 +92,7 @@ async function viewHoliday(id) {
   const secs = MenuCard.sections(h, rmap);
   const right = `<a class="iconbtn" href="#/holiday/${h.id}/edit" aria-label="Изменить">${Icons.edit}</a>
     <button class="iconbtn" data-act="delete" aria-label="Удалить">${Icons.trash}</button>`;
+  const isPhoto = h.theme === 'photo' && !!h.bgPhoto;
   const hasRecipes = h.items.some((it) => it.recipeId && rmap.has(it.recipeId));
 
   const html = `${topbar('#/holidays', right)}
@@ -116,7 +117,21 @@ async function viewHoliday(id) {
 
       <section class="block">
         <h2 class="block-title">картинка</h2>
-        <div class="themes">${Object.entries(CARD_THEMES).map(([k, T]) => `<button type="button" class="theme ${k === (CARD_THEMES[h.theme] ? h.theme : 'aura') ? 'on' : ''}" data-theme="${k}" style="--tbg:${T.css || T.bg};--tc:${T.title};--ts:${T.section}"><span class="th-sw"><i></i><i></i></span>${esc(T.name)}</button>`).join('')}</div>
+        <p class="pick-label">Фон</p>
+        <div class="themes">${Object.entries(CARD_THEMES).map(([k, T]) => `<button type="button" class="theme ${!isPhoto && k === themeKey(h.theme) ? 'on' : ''}" data-theme="${k}" style="--tbg:${T.css || T.bg};--tc:${T.title};--ts:${T.section}"><span class="th-sw"><i></i><i></i></span>${esc(T.name)}</button>`).join('')}
+          <button type="button" class="theme photo-theme ${isPhoto ? 'on' : ''}" data-theme="photo" style="--tc:#3B2340">${h.bgPhoto ? `<img class="bg-thumb" data-photo="${esc(h.bgPhoto)}" alt="">` : `<span class="bg-thumb ph">${Icons.camera}</span>`}Своё фото</button>
+        </div>
+        <input type="file" accept="image/*" id="bgIn" hidden>
+        ${isPhoto ? `<div class="photo-opts">
+          <p class="pick-label">Подложка под текстом</p>
+          ${chipsHTML(Object.entries(PHOTO_PANELS).map(([k, p]) => [k, esc(p.name)]), PHOTO_PANELS[h.panel] ? h.panel : 'light', 'panel')}
+          <label class="range"><span>${(h.panel || 'light').startsWith('none') ? 'Затемнение фото' : 'Плотность подложки'}</span><input type="range" id="alphaIn" min="20" max="95" value="${h.panelAlpha ?? 72}"></label>
+          <div class="row-btns tight"><button type="button" class="btn small ghost" data-bg="change">${Icons.camera} Другое фото</button><button type="button" class="btn small ghost danger-text" data-bg="remove">${Icons.trash} Убрать фото</button></div>
+        </div>` : ''}
+        <p class="pick-label">Шрифт</p>
+        <div class="chips font-chips">${Object.entries(MENU_FONTS).map(([k, f]) => `<button type="button" class="chip font-chip ${k === (MENU_FONTS[h.font] ? h.font : 'classic') ? 'on' : ''}" data-font="${k}" style="font-family:${f.family.replace(/"/g, "'")};${f.chip}">${esc(f.name)}</button>`).join('')}</div>
+        <p class="pick-label">Размер</p>
+        ${chipsHTML([['post', 'Пост 4:5'], ['story', 'Сторис 9:16']], h.format === 'story' ? 'story' : 'post', 'format')}
         <div class="card-preview"><img id="cardImg" alt="Картинка с меню"><p class="muted small" id="cardWait">Рисую…</p></div>
         <div class="actions">
           <button class="btn" data-act="image">${Icons.share} Отправить картинку</button>
@@ -142,13 +157,58 @@ async function viewHoliday(id) {
       $('#cardWait', root).hidden = true;
     };
     draw();
+    const save = () => DB.put('holidays', { ...h, updated: Date.now() });
+    const bgIn = $('#bgIn', root);
+    bgIn.addEventListener('change', async () => {
+      const file = bgIn.files[0];
+      bgIn.value = '';
+      if (!file) return;
+      toast('Загружаю фото…');
+      try {
+        const blob = await Photos.compress(file, 2000, 0.86);
+        const id = uid();
+        await DB.put('photos', { id, blob });
+        if (h.bgPhoto) await Photos.remove(h.bgPhoto);
+        h.bgPhoto = id;
+        h.theme = 'photo';
+        if (!h.panel) h.panel = 'light';
+        await save();
+        rerender();
+      } catch (err) { toast('Не получилось открыть фото'); }
+    });
+    let alphaTimer;
+    const alphaIn = $('#alphaIn', root);
+    if (alphaIn) alphaIn.addEventListener('input', () => {
+      h.panelAlpha = +alphaIn.value;
+      clearTimeout(alphaTimer);
+      alphaTimer = setTimeout(() => { save(); draw(); }, 250);
+    });
     root.addEventListener('click', async (e) => {
       const th = e.target.closest('[data-theme]');
       if (th) {
+        if (th.dataset.theme === 'photo' && !h.bgPhoto) { bgIn.click(); return; }
         h.theme = th.dataset.theme;
-        $$('[data-theme]', root).forEach((b) => b.classList.toggle('on', b === th));
-        await DB.put('holidays', { ...h, updated: Date.now() });
-        draw();
+        await save();
+        rerender();
+        return;
+      }
+      const bgb = e.target.closest('[data-bg]');
+      if (bgb) {
+        if (bgb.dataset.bg === 'change') { bgIn.click(); return; }
+        await Photos.remove(h.bgPhoto);
+        h.bgPhoto = null;
+        h.theme = 'aura';
+        await save();
+        rerender();
+        return;
+      }
+      const opt = e.target.closest('[data-panel],[data-font],[data-format]');
+      if (opt) {
+        if (opt.dataset.panel) h.panel = opt.dataset.panel;
+        if (opt.dataset.font) h.font = opt.dataset.font;
+        if (opt.dataset.format) h.format = opt.dataset.format;
+        await save();
+        rerender();
         return;
       }
       const hi = e.target.closest('[data-hid]');
@@ -176,6 +236,7 @@ async function viewHoliday(id) {
       }
       if (a === 'delete') {
         if (!(await ask(`Удалить праздник «${h.title}»?`))) return;
+        if (h.bgPhoto) await Photos.remove(h.bgPhoto);
         await DB.del('holidays', h.id);
         location.hash = '#/holidays';
       }

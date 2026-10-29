@@ -10,15 +10,41 @@ function cleanLine(line) {
   return line.replace(/^\s*(?:[•·▪◦*+]|-(?=\s))\s*/, '').trim();
 }
 
+// Единицы, которые узнаём без тире: «Мука 200 г», «200 г муки»
+const UNIT_SRC = '((?:кг|грамм[а-я]*|гр|г|мг|мл|л|шт|ст\\.?\\s?л|ч\\.?\\s?л|стакан[а-я]*|стак|щепотк[а-я]|щеп|упаковк[а-я]|уп|пачк[а-я]|зубч[а-я]*|зуб|g|kg|ml|pcs|tbsp|tsp)\\.?)(?![а-яёa-z])';
+const TRAIL_RE = new RegExp('^(.+?)\\s+(\\d+(?:[.,]\\d+)?)\\s*' + UNIT_SRC + '\\s*(.*)$', 'i');
+const LEAD_RE = new RegExp('^(\\d+(?:[.,]\\d+)?)\\s*' + UNIT_SRC + '\\s+(.+)$', 'i');
+const BARE_RE = /^(.+?)\s+(\d+(?:[.,]\d+)?)$/;
+
 function parseLine(line) {
-  const m = line.match(ING_RE);
-  if (!m) return null;
-  return {
-    name: m[1].trim(),
-    amount: parseFloat(m[2].replace(',', '.')),
-    unit: (m[3] || '').trim(),
-    note: (m[4] || '').trim()
-  };
+  const num = (x) => parseFloat(x.replace(',', '.'));
+  let m = line.match(ING_RE);
+  if (m) return { name: m[1].trim(), amount: num(m[2]), unit: (m[3] || '').trim(), note: (m[4] || '').trim() };
+  m = line.match(TRAIL_RE);
+  if (m) return { name: m[1].trim(), amount: num(m[2]), unit: m[3].trim(), note: (m[4] || '').trim() };
+  m = line.match(LEAD_RE);
+  if (m) {
+    const name = m[3].trim();
+    return { name: name.charAt(0).toUpperCase() + name.slice(1), amount: num(m[1]), unit: m[2].trim(), note: '' };
+  }
+  m = line.match(BARE_RE);
+  if (m && !/[%]$/.test(m[1])) return { name: m[1].trim(), amount: num(m[2]), unit: '', note: '' };
+  return null;
+}
+
+// Обратно в текст (для хранения): этап — строкой с двоеточием, продукт — «Название — 200 г»
+function serializeIngredients(rows) {
+  const out = [];
+  for (const r of rows) {
+    const name = (r.name || '').trim();
+    if (r.type === 'group') { if (name) { if (out.length) out.push(''); out.push(name.replace(/:$/, '') + ':'); } continue; }
+    const amt = String(r.amount ?? '').trim().replace('.', ',');
+    const unit = (r.unit || '').trim();
+    if (!name && !amt) continue;
+    if (amt) out.push(`${name} — ${amt}${unit ? ' ' + unit : ''}${r.note ? ' ' + r.note : ''}`);
+    else out.push(`${name}${unit ? ' ' + unit : ''}`);
+  }
+  return out.join('\n');
 }
 
 function parseIngredients(text) {

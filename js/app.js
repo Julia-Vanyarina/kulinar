@@ -354,13 +354,15 @@ async function viewRecipe(id) {
   const r = await DB.get('recipes', id);
   if (!r) return { html: topbar('#/recipes') + emptyHTML(Doodles.cutlery(), 'Рецепт не найден', 'Возможно, он был удалён.') };
   const base = +r.yieldCount || 0;
-  const st = state.scale[id] || (state.scale[id] = { mode: 'groups', target: base || null, k: 1 });
+  const pBase = +r.portionSize || 0;
+  const pUnit = r.portionUnit || 'мл';
+  const st = state.scale[id] || (state.scale[id] = { mode: 'groups', target: base || null, portion: pBase || null, k: 1 });
   const unit = r.yieldUnit || 'порц.';
   const right = `<button class="iconbtn ${r.fav ? 'on' : ''}" data-act="fav" aria-label="Избранное">${r.fav ? Icons.starFill : Icons.star}</button>
     <a class="iconbtn" href="#/recipe/${r.id}/edit" aria-label="Изменить">${Icons.edit}</a>`;
 
   const scaler = base
-    ? `<div class="scaler"><span>На</span><button type="button" class="stepper" data-step="-1">−</button><input id="scaleInput" type="number" inputmode="decimal" min="0" step="any" value="${st.target ?? base}"><button type="button" class="stepper" data-step="1">+</button><span>${esc(unit)}</span><span class="k" id="kLabel"></span></div>`
+    ? `<div class="scaler"><span>На</span><button type="button" class="stepper" data-step="-1">−</button><input id="scaleInput" type="number" inputmode="decimal" min="0" step="any" value="${st.target ?? base}"><button type="button" class="stepper" data-step="1">+</button><span>${esc(unit)}</span>${pBase ? `<span class="por">по <input id="portionInput" type="number" inputmode="decimal" min="0" step="any" value="${st.portion ?? pBase}"> ${esc(pUnit)}</span>` : ''}<span class="k" id="kLabel"></span></div>`
     : `<div class="scaler"><span>Умножить на ×</span><input id="kInput" type="number" inputmode="decimal" min="0" step="any" value="${st.k}"><span class="k muted">укажи выход в рецепте, чтобы считать по порциям</span></div>`;
 
   const html = `${topbar('#/recipes', right)}
@@ -370,7 +372,7 @@ async function viewRecipe(id) {
       <h1 class="detail-title">${esc(r.title)}</h1>
       <div class="meta-row">
         ${r.time ? `<span class="pill">${Icons.clock}${esc(r.time)}</span>` : ''}
-        ${base ? `<span class="pill">выход: ${fmtAmount(base)} ${esc(unit)}</span>` : ''}
+        ${base ? `<span class="pill">выход: ${fmtAmount(base)} ${esc(unit)}${pBase ? ` по ${fmtAmount(pBase)} ${esc(pUnit)}` : ''}</span>` : ''}
       </div>
 
       <section class="block">
@@ -397,7 +399,7 @@ async function viewRecipe(id) {
   const bind = (root) => {
     const draw = () => {
       if (base) {
-        st.k = (st.target || 0) / base;
+        st.k = ((st.target || 0) / base) * (pBase ? (st.portion || 0) / pBase : 1);
         $('#kLabel', root).textContent = Math.abs(st.k - 1) > 1e-9 ? `×${fmtAmount(st.k)}` : '';
       }
       $('#ingList', root).innerHTML = ingListHTML(r, st);
@@ -405,6 +407,8 @@ async function viewRecipe(id) {
     draw();
     const si = $('#scaleInput', root);
     if (si) si.addEventListener('input', () => { st.target = parseFloat(si.value.replace(',', '.')) || 0; draw(); });
+    const pi = $('#portionInput', root);
+    if (pi) pi.addEventListener('input', () => { st.portion = parseFloat(pi.value.replace(',', '.')) || 0; draw(); });
     const ki = $('#kInput', root);
     if (ki) ki.addEventListener('input', () => { st.k = parseFloat(ki.value.replace(',', '.')) || 0; draw(); });
     root.addEventListener('click', async (e) => {
@@ -458,13 +462,29 @@ async function viewRecipeEdit(id) {
         <label class="field"><span>Выход</span><input name="yieldCount" type="number" inputmode="decimal" step="any" min="0" value="${esc(v.yieldCount)}" placeholder="10"></label>
         <label class="field"><span>Чего</span><input name="yieldUnit" value="${esc(v.yieldUnit)}" placeholder="порц. / шт / г"></label>
       </div>
+      <div class="field-row">
+        <label class="field"><span>Одна порция <i>(необяз.)</i></span><input name="portionSize" type="number" inputmode="decimal" step="any" min="0" value="${esc(v.portionSize || '')}" placeholder="350"></label>
+        <label class="field"><span>В чём</span><input name="portionUnit" list="portionUnits" value="${esc(v.portionUnit || 'мл')}" placeholder="мл / г"></label>
+      </div>
+      <datalist id="portionUnits"><option value="мл"><option value="г"></datalist>
+      <p class="hint">Например, 10 шт по 350 мл. Тогда в рецепте можно будет пересчитать и на другое количество, и на другой объём креманок.</p>
       <div class="field"><span>Фото</span><div id="photoBox">${photoEditorHTML(v.photos || [])}</div></div>
 
-      <label class="field"><span>Ингредиенты</span>
-        <textarea name="ingredients" rows="10" placeholder="Карамельный крамбл&#10;Масло сливочное 82,5% — 170 г&#10;Мука — 291 г&#10;&#10;Крем&#10;Сливки 33% — 187 г">${esc(v.ingredients)}</textarea>
-      </label>
-      <p class="hint">Каждый продукт — с новой строки: <b>Мука — 291 г</b>. Название этапа пиши отдельной строкой без граммовки. Можно просто вставить готовый список.</p>
-      <details class="preview" id="ingPreviewWrap"><summary>Как это прочиталось</summary><div id="ingPreview"></div></details>
+      <div class="field"><span>Ингредиенты</span>
+        <div class="ing-editor" id="ingRows"></div>
+        <div class="ing-tools" id="ingTools">
+          <button type="button" class="btn small ghost" data-ing="item">${Icons.plus} продукт</button>
+          <button type="button" class="btn small ghost" data-ing="group">${Icons.plus} этап</button>
+          <button type="button" class="btn small ghost" data-ing="paste">Вставить текстом</button>
+        </div>
+        <div id="ingPasteBox" hidden>
+          <textarea name="ingredients" rows="10" placeholder="Вставь готовый список, например:&#10;Мука 200 г&#10;Творог 5% 180 гр&#10;Желтки 2 шт">${esc(v.ingredients)}</textarea>
+          <p class="hint" style="margin-top:8px">Можно писать как удобно: «Мука 200 г», «Мука — 200 г», «200 г муки». Строка без количества перед продуктами станет названием этапа.</p>
+          <details class="preview" open><summary>Как это прочиталось</summary><div id="ingPreview"></div></details>
+          <button type="button" class="btn small" data-ing="rows">Готово — показать строками</button>
+        </div>
+      </div>
+      <datalist id="unitList"><option value="г"><option value="кг"><option value="мл"><option value="л"><option value="шт"><option value="ст.л."><option value="ч.л."><option value="стакан"><option value="щепотка"><option value="по вкусу"></datalist>
 
       <label class="field"><span>Инвентарь <i>(необязательно)</i></span><textarea name="inventory" rows="3" placeholder="Миксер&#10;Сотейник с толстым дном">${esc(v.inventory)}</textarea></label>
       <label class="field"><span>Технология приготовления</span><textarea name="steps" rows="10" placeholder="Каждый шаг — с новой строки.&#10;Строка с двоеточием в конце станет заголовком: «Крем:»">${esc(v.steps)}</textarea></label>
@@ -482,11 +502,70 @@ async function viewRecipeEdit(id) {
     const form = $('#recipeForm', root);
     activeEditor = new PhotoEditor($('#photoBox', root), v.photos || []);
     const ta = form.elements.ingredients;
+    const rowsBox = $('#ingRows', root);
+    const pasteBox = $('#ingPasteBox', root);
+    let pasteMode = false;
     const preview = () => {
       $('#ingPreview', root).innerHTML = ingListHTML({ ingredients: ta.value }, { mode: 'groups', k: 1 });
     };
+    const rowHTML = (r) => r.type === 'group'
+      ? `<div class="ir group" data-type="group"><input class="ir-name" value="${esc(r.name)}" placeholder="Этап, например: Крем" enterkeyhint="next"><button type="button" class="ir-x" aria-label="Убрать">${Icons.x}</button></div>`
+      : `<div class="ir" data-type="item" data-note="${esc(r.note || '')}"><input class="ir-name" value="${esc(r.name)}" placeholder="Продукт" enterkeyhint="next"><input class="ir-amt" value="${esc(r.amount == null ? '' : String(r.amount).replace('.', ','))}" inputmode="decimal" placeholder="200" enterkeyhint="next"><input class="ir-unit" list="unitList" value="${esc(r.unit || '')}" placeholder="г" enterkeyhint="next"><button type="button" class="ir-x" aria-label="Убрать">${Icons.x}</button></div>`;
+    const textToRows = (text) => {
+      const rows = [];
+      for (const g of parseIngredients(text)) {
+        if (g.title) rows.push({ type: 'group', name: g.title });
+        for (const it of g.items) rows.push({ type: 'item', name: it.name, amount: it.amount, unit: it.unit, note: it.note });
+      }
+      return rows;
+    };
+    const readRows = () => $$('.ir', rowsBox).map((el) => ({
+      type: el.dataset.type,
+      name: $('.ir-name', el).value,
+      amount: el.dataset.type === 'item' ? $('.ir-amt', el).value : '',
+      unit: el.dataset.type === 'item' ? $('.ir-unit', el).value : '',
+      note: el.dataset.note || ''
+    }));
+    const drawRows = (rows) => {
+      if (!rows.length) rows = [{ type: 'item', name: '', amount: '', unit: 'г' }];
+      rowsBox.innerHTML = rows.map(rowHTML).join('');
+    };
+    const addRow = (type, after) => {
+      const html = rowHTML(type === 'group' ? { type, name: '' } : { type, name: '', amount: '', unit: 'г' });
+      if (after) after.insertAdjacentHTML('afterend', html); else rowsBox.insertAdjacentHTML('beforeend', html);
+      const el = after ? after.nextElementSibling : rowsBox.lastElementChild;
+      $('.ir-name', el).focus();
+    };
+    drawRows(textToRows(v.ingredients));
+    rowsBox.addEventListener('click', (e) => {
+      const x = e.target.closest('.ir-x');
+      if (x) { x.closest('.ir').remove(); if (!$('.ir', rowsBox)) drawRows([]); }
+    });
+    rowsBox.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter') return;
+      e.preventDefault();
+      const row = e.target.closest('.ir');
+      const inputs = $$('input', row);
+      const i = inputs.indexOf(e.target);
+      if (i < inputs.length - 1) inputs[i + 1].focus();
+      else addRow('item', row);
+    });
+    $('#ingTools', root).addEventListener('click', (e) => {
+      const b = e.target.closest('[data-ing]');
+      if (!b) return;
+      if (b.dataset.ing === 'item' || b.dataset.ing === 'group') addRow(b.dataset.ing);
+      if (b.dataset.ing === 'paste') {
+        ta.value = serializeIngredients(readRows());
+        pasteMode = true; pasteBox.hidden = false; rowsBox.hidden = true; $('#ingTools', root).hidden = true;
+        preview(); ta.focus();
+      }
+    });
+    pasteBox.addEventListener('click', (e) => {
+      if (!e.target.closest('[data-ing="rows"]')) return;
+      drawRows(textToRows(ta.value));
+      pasteMode = false; pasteBox.hidden = true; rowsBox.hidden = false; $('#ingTools', root).hidden = false;
+    });
     ta.addEventListener('input', preview);
-    preview();
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
       const f = form.elements;
@@ -499,7 +578,9 @@ async function viewRecipeEdit(id) {
         time: f.time.value.trim(),
         yieldCount: f.yieldCount.value ? parseFloat(f.yieldCount.value.replace(',', '.')) : '',
         yieldUnit: f.yieldUnit.value.trim() || 'порц.',
-        ingredients: f.ingredients.value.trim(),
+        ingredients: (pasteMode ? f.ingredients.value : serializeIngredients(readRows())).trim(),
+        portionSize: f.portionSize.value ? parseFloat(f.portionSize.value.replace(',', '.')) : '',
+        portionUnit: f.portionUnit.value.trim() || 'мл',
         inventory: f.inventory.value.trim(),
         steps: f.steps.value.trim(),
         notes: f.notes.value.trim(),
@@ -1153,6 +1234,7 @@ window.addEventListener('hashchange', render);
   if (!location.hash) history.replaceState(null, '', '#/recipes');
   let added = 0;
   try { added = await addStarterRecipes(); } catch (e) { console.warn(e); }
+  try { await migrateRecipes(); } catch (e) { console.warn(e); }
   await render();
   if (added) toast(`В тетрадь добавлено ${added} ${plural(added, 'рецепт', 'рецепта', 'рецептов')}`);
   Updater.init();

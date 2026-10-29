@@ -140,7 +140,7 @@ const MouseHelper = {
 
     if (screen === 'holiday' && ctx.holiday) {
       if (!(ctx.holiday.items || []).length) return { mood: 'think', text: 'С чего начнём — с закусок или сразу с десерта?', actions: [{ label: 'Добавить блюдо', run: () => { ctx.addItem && ctx.addItem(); return null; } }] };
-      return { mood: 'happy', text: 'Выбери рамку внизу — я нарисую картинку, которую можно отправить друзьям.', actions: [] };
+      return { mood: 'happy', text: 'Выбери фон внизу — или поставь своё фото из галереи. Шрифт тоже можно поменять, а я нарисую картинку для друзей.', actions: [] };
     }
 
     if (screen === 'finds') {
