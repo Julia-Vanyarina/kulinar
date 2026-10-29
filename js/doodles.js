@@ -1,14 +1,14 @@
 'use strict';
 // Иллюстрации в стиле «акварель + тонкий контур». Фильтры #wc и #ink описаны в index.html.
 const P = {
-  ink: '#5B4636', paper: '#FFFDF8', cream: '#F4E8D3', sand: '#E6CFA6', wood: '#CFA172', woodD: '#A97C52',
-  rose: '#EBBAB4', roseD: '#CF8E88', sage: '#BCC8AB', sageD: '#90A27F', blue: '#AFC3D9', blueD: '#7896B8',
-  butter: '#F2D795', yolk: '#F0B54E', cocoa: '#8E6249', tomato: '#DD8577', gray: '#DDD5CC',
-  mouse: '#DCD2C8', mouseD: '#C2B4A8', earIn: '#F0C4BE', cheek: '#EDA8A1', nose: '#D9877F'
+  ink: '#3B2340', paper: '#FFFDF8', cream: '#FFF1DC', sand: '#F6D6A8', wood: '#E9A66B', woodD: '#C97D45',
+  rose: '#F9B4CB', roseD: '#F3619C', sage: '#C6E07A', sageD: '#8DBA4E', blue: '#A9BEE6', blueD: '#6E86C4',
+  butter: '#F8E68A', yolk: '#FFB13B', cocoa: '#8A4B3C', tomato: '#FB5A4E', gray: '#EADCF2',
+  mouse: '#EFE6F6', mouseD: '#D6C6E6', earIn: '#F9B4CB', cheek: '#FF8FB3', nose: '#F3619C'
 };
 
 const wash = (inner, extra = '') => `<g filter="url(#wc)" ${extra}>${inner}</g>`;
-const ink = (inner, w = 1.7) => `<g filter="url(#ink)" fill="none" stroke="${P.ink}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round">${inner}</g>`;
+const ink = (inner, w = 1.6) => `<g filter="url(#ink)" fill="none" stroke="${P.ink}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round">${inner}</g>`;
 const art = (body, vb = '0 0 120 120', cls = '') => {
   // второй аргумент может быть слоем контура, а не viewBox
   if (vb.trim().startsWith('<')) { body += vb; vb = '0 0 120 120'; }
@@ -136,7 +136,7 @@ const Doodles = {
   wine: () => art(
     wash(`${shadow(60, 108, 22)}
       <path d="M38 16 L82 16 C84 46 76 64 60 64 C44 64 36 46 38 16Z" fill="${P.blue}" opacity=".22"/>
-      <path d="M40 38 C48 41 72 41 80 38 C79 54 71 62 60 62 C49 62 41 54 40 38Z" fill="#C98289"/>`),
+      <path d="M40 38 C48 41 72 41 80 38 C79 54 71 62 60 62 C49 62 41 54 40 38Z" fill="#E8638E"/>`),
     ink(`<path d="M38 16 L82 16 C84 46 76 64 60 64 C44 64 36 46 38 16Z"/>
       <path d="M40 38 C48 41 72 41 80 38" stroke-width="1.1"/>
       <path d="M60 64 L60 98 M44 104 C52 99 68 99 76 104 C68 107 52 107 44 104Z"/>
@@ -162,7 +162,7 @@ const Doodles = {
   tomatoes: () => art(
     wash(`${shadow(64, 100, 44)}
       <path d="M18 26 C40 32 70 32 102 22" stroke="${P.sageD}" stroke-width="4" fill="none" stroke-linecap="round"/>
-      <circle cx="34" cy="62" r="17" fill="${P.tomato}"/><circle cx="66" cy="74" r="19" fill="#D97A6C"/><circle cx="94" cy="58" r="15" fill="${P.tomato}"/>
+      <circle cx="34" cy="62" r="17" fill="${P.tomato}"/><circle cx="66" cy="74" r="19" fill="#F2504A"/><circle cx="94" cy="58" r="15" fill="${P.tomato}"/>
       <ellipse cx="28" cy="56" rx="5" ry="3" fill="${P.paper}" opacity=".55"/><ellipse cx="60" cy="67" rx="5" ry="3" fill="${P.paper}" opacity=".55"/>
       <path d="M26 46 L34 52 L42 46 L36 44 Z M58 56 L66 62 L74 56 L68 54 Z M86 44 L94 49 L102 44 L96 42 Z" fill="${P.sage}"/>`),
     ink(`<circle cx="34" cy="62" r="17"/><circle cx="66" cy="74" r="19"/><circle cx="94" cy="58" r="15"/>
@@ -212,7 +212,7 @@ const Doodles = {
 
   strawberry: () => art(
     wash(`${shadow(60, 108, 26)}
-      <path d="M60 104 C30 86 22 52 34 42 C44 34 76 34 86 42 C98 52 90 86 60 104Z" fill="#DE8379"/>
+      <path d="M60 104 C30 86 22 52 34 42 C44 34 76 34 86 42 C98 52 90 86 60 104Z" fill="${P.tomato}"/>
       <ellipse cx="46" cy="56" rx="6" ry="10" fill="${P.paper}" opacity=".35" transform="rotate(20 46 56)"/>
       <path d="M36 40 L46 26 L56 36 L64 22 L72 36 L84 28 L82 42 C70 46 50 46 36 40Z" fill="${P.sage}"/>`),
     ink(`<path d="M60 104 C30 86 22 52 34 42 M86 42 C98 52 90 86 60 104"/>
@@ -254,56 +254,93 @@ const Doodles = {
 };
 
 /* ===================== Мышка-повар ===================== */
+// Мультяшная мышка: большие блестящие глаза, румянец, колпак со звёздочкой.
 // mood: idle | wave | think | happy
+const sparklePath = (cx, cy, r) => `M${cx} ${cy - r} Q${cx} ${cy} ${cx + r} ${cy} Q${cx} ${cy} ${cx} ${cy + r} Q${cx} ${cy} ${cx - r} ${cy} Q${cx} ${cy} ${cx} ${cy - r}Z`;
+
 function Mouse(mood = 'idle') {
-  const W = (s) => wash(s);
-  const K = (s, w) => ink(s, w);
-  const eyes = mood === 'happy'
-    ? K('<path d="M48.5 66 Q52 61.5 55.5 66 M64.5 66 Q68 61.5 71.5 66" stroke-width="1.8"/>')
-    : (() => {
-      const dx = mood === 'think' ? 1.4 : 0, dy = mood === 'think' ? -1.4 : 0;
-      return `<ellipse cx="${52 + dx}" cy="${65 + dy}" rx="3.1" ry="3.7" fill="#3B2E27"/><ellipse cx="${68 + dx}" cy="${65 + dy}" rx="3.1" ry="3.7" fill="#3B2E27"/>
-        <circle cx="${53.2 + dx}" cy="${63.5 + dy}" r="1.1" fill="#fff"/><circle cx="${69.2 + dx}" cy="${63.5 + dy}" r="1.1" fill="#fff"/>`;
-    })();
-  const spoon = W(`<path d="M80 100 L100 68" stroke="${P.wood}" stroke-width="3.6" stroke-linecap="round"/><ellipse cx="102.5" cy="62" rx="5" ry="7.5" fill="${P.wood}" transform="rotate(32 102.5 62)"/>`)
-    + K(`<path d="M80.5 100 L100 68" stroke-width="1.1"/><ellipse cx="102.5" cy="62" rx="5" ry="7.5" transform="rotate(32 102.5 62)" stroke-width="1.3"/>`);
-  const pawR = `<ellipse cx="81" cy="99" rx="5.2" ry="4.4" fill="${P.mouse}"/>`;
-  const pawL = `<ellipse cx="39" cy="101" rx="5.2" ry="4.4" fill="${P.mouse}"/>`;
+  const K = P.ink;
+  const st = `stroke="${K}" stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"`;
+  const sp = (cx, cy, r, fill) => `<path d="${sparklePath(cx, cy, r)}" fill="${fill}"/>`;
+  const defs = `<defs>
+    <radialGradient id="mzBody" cx="40%" cy="32%" r="78%"><stop offset="0" stop-color="#FFFBFF"/><stop offset=".6" stop-color="#EFE6F6"/><stop offset="1" stop-color="#D6C6E6"/></radialGradient>
+    <radialGradient id="mzEar" cx="50%" cy="45%" r="62%"><stop offset="0" stop-color="#FFD3E2"/><stop offset="1" stop-color="#F78FB3"/></radialGradient>
+    <radialGradient id="mzBlush" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#FF6F9E" stop-opacity=".75"/><stop offset="1" stop-color="#FF6F9E" stop-opacity="0"/></radialGradient>
+    <linearGradient id="mzApron" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FF9CC2"/><stop offset="1" stop-color="#F3619C"/></linearGradient>
+    <radialGradient id="mzHat" cx="42%" cy="30%" r="75%"><stop offset="0" stop-color="#FFFFFF"/><stop offset="1" stop-color="#EEE4F6"/></radialGradient>
+  </defs>`;
+
+  const eye = (cx, side) => {
+    const lash = side < 0
+      ? `M${cx - 5.5} ${63.5} l-3.6 -2.8 M${cx - 6} ${67} l-4.2 -.6 M${cx - 3.5} ${60.8} l-2 -3.6`
+      : `M${cx + 5.5} ${63.5} l3.6 -2.8 M${cx + 6} ${67} l4.2 -.6 M${cx + 3.5} ${60.8} l2 -3.6`;
+    const lashes = `<path d="${lash}" fill="none" stroke="${K}" stroke-width="1.5" stroke-linecap="round"/>`;
+    if (mood === 'happy') return `<path d="M${cx - 6} 69 Q${cx} 61.5 ${cx + 6} 69" fill="none" stroke="${K}" stroke-width="2.3" stroke-linecap="round"/>${lashes}`;
+    const dy = mood === 'think' ? -1.5 : 0, dx = mood === 'think' ? 1.3 : 0;
+    return `<ellipse cx="${cx}" cy="${68 + dy}" rx="6.3" ry="7.8" fill="${K}"/>
+      <ellipse cx="${cx + 2 + dx}" cy="${64.8 + dy}" rx="2.5" ry="2.9" fill="#fff"/>
+      ${sp(cx - 2.3 + dx, 71.6 + dy, 1.8, '#fff')}${sp(cx + 3 + dx, 70.5 + dy, .9, '#FFE3EE')}${lashes}`;
+  };
+
+  const spoon = `<path d="M80 104 L100 70" stroke="#E9A66B" stroke-width="3.8" stroke-linecap="round"/>
+    <path d="M80 104 L100 70" stroke="${K}" stroke-width="1" stroke-linecap="round" opacity=".5"/>
+    <ellipse cx="102.5" cy="64" rx="5.2" ry="7.6" fill="#E9A66B" transform="rotate(32 102.5 64)" ${st}/>`;
+  const paw = (x, y, r = 5) => `<circle cx="${x}" cy="${y}" r="${r}" fill="url(#mzBody)" ${st}/>`;
+
   let arms = '', extra = '';
   if (mood === 'wave') {
-    arms = W(`<path d="M42 96 C37 92 33 87 31 81" stroke="${P.mouse}" stroke-width="7" stroke-linecap="round" fill="none"/><ellipse cx="30" cy="79" rx="5.4" ry="4.8" fill="${P.mouse}"/>${pawR}`) + spoon
-      + K('<path d="M30 79 m-5 0 a5 4.6 0 1 0 10 0 a5 4.6 0 1 0 -10 0" stroke-width="1.1"/>');
-    extra = K('<path d="M20 74 C17 78 17 82 20 86 M24 70 C20 76 20 84 24 90" stroke-width="1.2" opacity=".6"/>');
+    arms = `<ellipse cx="35" cy="93" rx="4.6" ry="9" transform="rotate(32 35 93)" fill="url(#mzBody)" ${st}/>${paw(30, 84, 5.4)}${spoon}${paw(80, 103)}`;
+    extra = `<path d="M19 78 C16 82 16 87 19 91 M23 74 C19 80 19 89 23 95" fill="none" stroke="#C9B3E6" stroke-width="1.6" stroke-linecap="round"/>${sp(100, 28, 5, '#F8D34A')}`;
   } else if (mood === 'think') {
-    arms = W(`${pawL}<path d="M76 100 C74 94 70 90 67 88" stroke="${P.mouse}" stroke-width="7" stroke-linecap="round" fill="none"/><ellipse cx="66" cy="86" rx="5" ry="4.4" fill="${P.mouse}"/>`)
-      + K('<ellipse cx="66" cy="86" rx="5" ry="4.4" stroke-width="1"/>');
-    extra = K(`<path d="M94 20 C94 13 104 13 104 20 C104 25 99 25 99 31 M99 36 L99 36.5" stroke="${P.roseD}" stroke-width="2.4"/>`);
+    arms = `${paw(40, 104)}${paw(69, 91)}`;
+    extra = `<path d="M95 20 C95 12 106 12 106 20 C106 25 100.5 25.5 100.5 31 M100.5 36.5 L100.5 37" fill="none" stroke="#B494F8" stroke-width="2.8" stroke-linecap="round"/>${sp(88, 16, 3.2, '#F8D34A')}${sp(112, 36, 2.4, '#F3619C')}`;
   } else if (mood === 'happy') {
-    arms = W(`<ellipse cx="36" cy="92" rx="5.2" ry="4.6" fill="${P.mouse}"/><ellipse cx="84" cy="92" rx="5.2" ry="4.6" fill="${P.mouse}"/>`);
-    extra = W(`<path d="${heartPath(98, 26, 6)}" fill="${P.rose}"/><path d="${heartPath(22, 40, 4.5)}" fill="${P.rose}"/><path d="${heartPath(104, 46, 3.5)}" fill="${P.roseD}"/>`);
+    arms = `${paw(37, 96)}${paw(83, 96)}`;
+    extra = `<path d="${heartPath(100, 24, 6)}" fill="#F3619C"/><path d="${heartPath(20, 40, 4.5)}" fill="#F9A8C6"/>${sp(108, 46, 4, '#F8D34A')}${sp(14, 24, 3, '#F8D34A')}${sp(92, 10, 2.4, '#B494F8')}`;
   } else {
-    arms = W(`${pawL}${pawR}`) + spoon;
+    arms = `${paw(40, 104)}${spoon}${paw(80, 103)}`;
+    extra = `${sp(100, 26, 5.2, '#F8D34A')}${sp(110, 40, 2.6, '#F3619C')}${sp(16, 30, 3, '#B494F8')}`;
   }
 
-  return art(`
-    ${W(`<ellipse cx="60" cy="125" rx="30" ry="3.6" fill="${P.gray}" opacity=".6"/>`)}
-    ${W(`<path d="M82 112 C100 117 110 104 104 94 C99 87 90 92 95 98" stroke="#D8A8A2" stroke-width="3" fill="none" stroke-linecap="round"/>`)}
-    ${W(`<ellipse cx="60" cy="102" rx="25" ry="21" fill="${P.mouse}"/><ellipse cx="49" cy="121" rx="7.5" ry="4" fill="#E9C6C0"/><ellipse cx="71" cy="121" rx="7.5" ry="4" fill="#E9C6C0"/>`)}
-    ${K('<path d="M37 94 C34 110 44 122 60 122 C76 122 86 110 83 94" stroke-width="1.5"/>')}
-    ${W(`<path d="M44 94 C51 90 69 90 76 94 L74.5 117 C66 121.5 54 121.5 45.5 117 Z" fill="${P.rose}"/><path d="M53 105 L67 105 L66 113 L54 113 Z" fill="${P.roseD}" opacity=".45"/>`)}
-    ${K('<path d="M44 94 C51 90 69 90 76 94 L74.5 117 C66 121.5 54 121.5 45.5 117 Z M53 105 L67 105 L66 113 L54 113 Z" stroke-width="1.2"/>')}
+  return art(`${defs}
+    <ellipse cx="60" cy="126" rx="28" ry="3.6" fill="#E6D8F0"/>
+    <path d="M80 114 C98 120 110 106 103 96 C98 89 89 94 94 100" fill="none" stroke="#F78FB3" stroke-width="3.2" stroke-linecap="round"/>
+    <ellipse cx="50" cy="122" rx="7" ry="4" fill="#F9B4CB" ${st}/><ellipse cx="70" cy="122" rx="7" ry="4" fill="#F9B4CB" ${st}/>
+    <ellipse cx="60" cy="106" rx="22" ry="17" fill="url(#mzBody)" ${st}/>
+    <path d="M45 98 C52 94 68 94 75 98 L73.5 118 C66 122 54 122 46.5 118 Z" fill="url(#mzApron)" ${st}/>
+    ${sp(60, 109, 5, '#FFE66B')}${sp(66.5, 104, 2, '#FFF3B0')}
     ${arms}
-    ${W(`<circle cx="35" cy="48" r="15.5" fill="${P.mouse}"/><circle cx="85" cy="48" r="15.5" fill="${P.mouse}"/><circle cx="36" cy="49" r="10" fill="${P.earIn}"/><circle cx="84" cy="49" r="10" fill="${P.earIn}"/>`)}
-    ${K('<circle cx="35" cy="48" r="15.5" stroke-width="1.4"/><circle cx="85" cy="48" r="15.5" stroke-width="1.4"/>')}
-    ${W(`<ellipse cx="60" cy="68" rx="24.5" ry="21" fill="${P.mouse}"/><ellipse cx="60" cy="76" rx="15" ry="9" fill="#EAE3DB"/><ellipse cx="44" cy="74" rx="5.4" ry="3.6" fill="${P.cheek}" opacity=".75"/><ellipse cx="76" cy="74" rx="5.4" ry="3.6" fill="${P.cheek}" opacity=".75"/>`)}
-    ${K('<ellipse cx="60" cy="68" rx="24.5" ry="21" stroke-width="1.5"/>')}
-    ${W(`<path d="M43 43 C33 36 37 19 50 22 C51 10 69 10 70 22 C83 19 87 36 77 43 Z" fill="${P.paper}"/><rect x="43" y="38" width="34" height="10" rx="3.5" fill="#F7F1E7"/>`)}
-    ${K('<path d="M43 40 C33 36 37 19 50 22 C51 10 69 10 70 22 C83 19 87 36 77 40" stroke-width="1.4"/><rect x="43" y="38" width="34" height="10" rx="3.5" stroke-width="1.4"/><path d="M54 25 L55 37 M66 25 L65 37" stroke-width="1" opacity=".6"/>')}
-    ${eyes}
-    <ellipse cx="60" cy="75.5" rx="3.3" ry="2.5" fill="${P.nose}"/>
-    ${K('<path d="M56.5 79.5 Q58.3 81.5 60 79.5 Q61.7 81.5 63.5 79.5" stroke-width="1.2"/><path d="M48 76 L35 74 M48 78.5 L36 80.5 M72 76 L85 74 M72 78.5 L84 80.5" stroke-width=".9" opacity=".55"/>')}
+    <circle cx="33" cy="50" r="17" fill="url(#mzBody)" ${st}/><circle cx="87" cy="50" r="17" fill="url(#mzBody)" ${st}/>
+    <circle cx="34" cy="51" r="11" fill="url(#mzEar)"/><circle cx="86" cy="51" r="11" fill="url(#mzEar)"/>
+    <ellipse cx="60" cy="69" rx="27.5" ry="23.5" fill="url(#mzBody)" ${st}/>
+    <ellipse cx="40" cy="78" rx="8.5" ry="5.5" fill="url(#mzBlush)"/><ellipse cx="80" cy="78" rx="8.5" ry="5.5" fill="url(#mzBlush)"/>
+    <g fill="${K}" opacity=".4"><circle cx="37" cy="76" r=".75"/><circle cx="40.5" cy="78.3" r=".75"/><circle cx="43.5" cy="76" r=".75"/><circle cx="76.5" cy="76" r=".75"/><circle cx="79.5" cy="78.3" r=".75"/><circle cx="83" cy="76" r=".75"/></g>
+    ${eye(49, -1)}${eye(71, 1)}
+    <path d="${heartPath(60, 74.6, 2.8)}" fill="#F3619C"/>
+    <path d="M56.5 81.2 Q58.3 83.4 60 81.2 Q61.7 83.4 63.5 81.2" fill="none" stroke="${K}" stroke-width="1.3" stroke-linecap="round"/>
+    <path d="M47 79 L35 77.5 M47 81.5 L36 83.5 M73 79 L85 77.5 M73 81.5 L84 83.5" stroke="#B9A6CC" stroke-width=".9" stroke-linecap="round"/>
+    <path d="M41 47 C30 40 34 21 48 24 C49 10 71 10 72 24 C86 21 90 40 79 47 Z" fill="url(#mzHat)" ${st}/>
+    <path d="M53 27 L54 41 M67 27 L66 41" stroke="#D9C9E8" stroke-width="1.4" stroke-linecap="round"/>
+    <rect x="41" y="41" width="38" height="10.5" rx="4.5" fill="#fff" ${st}/>
+    ${sp(60, 46.2, 4, '#F3619C')}
     ${extra}`, '0 0 120 130', 'mouse-svg');
 }
+
+// Декоративные звёздочки
+const _star8 = (() => {
+  const pts = [];
+  for (let i = 0; i < 16; i++) {
+    const a = (Math.PI * 2 * i) / 16 - Math.PI / 2;
+    const r = i % 2 ? 8.5 : 20;
+    pts.push(`${(20 + r * Math.cos(a)).toFixed(1)},${(20 + r * Math.sin(a)).toFixed(1)}`);
+  }
+  return pts.join(' ');
+})();
+const Deco = {
+  sparkle: (color = '#fff', cls = '') => `<svg class="deco ${cls}" viewBox="0 0 20 20" aria-hidden="true"><path d="${sparklePath(10, 10, 10)}" fill="${color}"/></svg>`,
+  star: (color = '#FB4645', cls = '') => `<svg class="deco ${cls}" viewBox="0 0 40 40" aria-hidden="true"><polygon points="${_star8}" fill="${color}"/></svg>`,
+  STAR8: _star8
+};
 
 // Заглушки для карточек без фото
 const PLACEHOLDERS = ['croissant', 'lemon', 'cake', 'tomatoes', 'bread', 'strawberry', 'cheese', 'cup', 'eggs', 'bowl'];

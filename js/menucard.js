@@ -1,25 +1,21 @@
 'use strict';
 /* ===================== Картинка с праздничным меню (canvas) ===================== */
 const CARD_THEMES = {
-  journal: {
-    name: 'Блокнот', bg: '#FBF7EF', title: '#5B4636', titleFont: 'hand', section: '#B9776E', item: '#4A3B30', desc: '#8A7A6B',
-    frame: 'notebook', frameColor: '#E9C3BE',
-    corners: ['bowl', 'flour', 'eggs', 'rollingPin'], sides: ['lemon', 'strawberry']
+  aura: {
+    name: 'Аура', bg: '#FFE3EC', css: 'radial-gradient(circle at 50% 55%, #F3477F 0%, #FFB3C8 45%, #FFF3D6 75%, #E7BEF8 100%)',
+    title: '#3B2340', section: '#E2306F', item: '#3B2340', desc: '#7D5C77', paper: true
   },
-  watercolor: {
-    name: 'Акварель', bg: '#FFFDF8', title: '#6F8DB0', titleFont: 'serif', section: '#C27C7A', item: '#4A3B30', desc: '#8A7A6B',
-    frame: 'wash', frameColor: '#8A7A6B',
-    corners: ['cake', 'cup', 'croissant', 'flower'], sides: []
+  sunset: {
+    name: 'Закат', bg: '#F7A6B4', css: 'linear-gradient(135deg, #E8335E, #F7A6B4 45%, #F6A04D)',
+    title: '#3B2340', section: '#E8335E', item: '#3B2340', desc: '#86576A', paper: true
   },
-  sage: {
-    name: 'Шалфей', bg: '#F4F3EC', title: '#6E7F62', titleFont: 'hand', section: '#A98760', item: '#3F3A30', desc: '#7F7A6A',
-    frame: 'double', frameColor: '#9AAA8B',
-    corners: ['tomatoes', 'wine', 'bread', 'cheese'], sides: []
+  lavender: {
+    name: 'Лаванда', bg: '#E7BEF8', css: '#E7BEF8',
+    title: '#FB4645', section: '#FB4645', item: '#3B2340', desc: '#6E4C82', paper: false
   },
-  powder: {
-    name: 'Пудра', bg: '#FBF1EF', title: '#B9776E', titleFont: 'serif', section: '#8FA07F', item: '#4A3B30', desc: '#8F7C74',
-    frame: 'dots', frameColor: '#E3B2AC',
-    corners: ['flower', 'strawberry', 'daisy', 'flower:#BCC8AB'], sides: ['mitt', 'milk']
+  lemon: {
+    name: 'Лимонад', bg: '#F8EDAD', css: '#F8EDAD',
+    title: '#ED7C30', section: '#ED7C30', item: '#5A3418', desc: '#8A6338', paper: false, corners: ['lemon', 'croissant', 'strawberry', 'cup']
   }
 };
 
@@ -34,7 +30,8 @@ const MenuCard = {
       await Promise.race([
         Promise.all([
           document.fonts.load('700 80px Caveat', sample),
-          document.fonts.load('700 80px "Amatic SC"', sample),
+          document.fonts.load('800 80px Unbounded', sample),
+          document.fonts.load('500 24px Unbounded', sample),
           document.fonts.load('italic 700 80px "Cormorant Garamond"', sample),
           document.fonts.load('600 40px "Cormorant Garamond"', sample),
           document.fonts.load('italic 600 40px "Cormorant Garamond"', sample),
@@ -107,7 +104,7 @@ const MenuCard = {
   // Раскладка: при draw=false только считает высоту
   layout(ctx, h, rmap, T, draw) {
     const W = this.W, cx = W / 2, maxW = 720;
-    let y = 200;
+    let y = 230;
     const text = (str, font, color, lh, opt = {}) => {
       ctx.font = font;
       for (const l of this.wrap(ctx, str, opt.maxW || maxW)) {
@@ -130,13 +127,11 @@ const MenuCard = {
       }
       y += lh * 0.2;
     };
-    const handTitle = T.titleFont === 'hand';
 
     const date = h.date ? fmtDay(h.date, { day: 'numeric', month: 'long' }) : '';
-    spaced(('меню' + (date ? ' · ' + date : '')).toUpperCase(), '800 24px Nunito, sans-serif', T.desc, 34);
+    spaced(('меню' + (date ? ' · ' + date : '')).toUpperCase(), '500 22px Unbounded, Nunito, sans-serif', T.desc, 34);
     y += 8;
-    if (handTitle) text(h.title || 'Праздник', '700 150px "Amatic SC", Caveat, cursive', T.title, 140);
-    else text(h.title || 'Праздник', 'italic 700 112px "Cormorant Garamond", serif', T.title, 112);
+    text(h.title || 'Праздник', '800 84px Unbounded, Nunito, sans-serif', T.title, 96, { maxW: 760 });
     if (h.subtitle) { y += 4; text(h.subtitle, 'italic 600 40px "Cormorant Garamond", serif', T.desc, 50); }
 
     // волнистый разделитель
@@ -156,16 +151,14 @@ const MenuCard = {
     if (!secs.length) { y += 30; text('добавь блюда — и меню появится здесь', 'italic 600 38px "Cormorant Garamond", serif', T.desc, 48); }
     for (const s of secs) {
       y += 34;
-      ctx.font = '700 66px Caveat, cursive';
+      const secFont = 'italic 700 58px "Cormorant Garamond", serif';
+      ctx.font = secFont;
       const tw = ctx.measureText(s.title).width;
       const lineY = y + 40;
-      text(s.title, '700 66px Caveat, cursive', T.section, 72);
+      text(s.title, secFont, T.section, 68);
       if (draw) {
-        ctx.strokeStyle = T.section; ctx.lineWidth = 2.5; ctx.lineCap = 'round';
-        ctx.beginPath();
-        ctx.moveTo(cx - tw / 2 - 90, lineY); ctx.lineTo(cx - tw / 2 - 24, lineY);
-        ctx.moveTo(cx + tw / 2 + 24, lineY); ctx.lineTo(cx + tw / 2 + 90, lineY);
-        ctx.stroke();
+        this.sparkle(ctx, cx - tw / 2 - 34, lineY, 14, T.section);
+        this.sparkle(ctx, cx + tw / 2 + 34, lineY, 14, T.section);
       }
       y += 4;
       for (const it of s.items) {
@@ -175,70 +168,113 @@ const MenuCard = {
       }
     }
     if (h.signature) { y += 50; text(h.signature, '700 54px Caveat, cursive', T.title, 60); }
-    y += 210;
+    y += 230;
     return y;
   },
 
-  frame(ctx, T, W, H, rnd) {
+  sparkle(ctx, x, y, r, color) {
     ctx.save();
-    ctx.strokeStyle = T.frameColor;
-    ctx.fillStyle = T.frameColor;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    const rr = (x, y, w, h, r) => {
-      ctx.beginPath();
-      ctx.moveTo(x + r, y);
-      ctx.arcTo(x + w, y, x + w, y + h, r);
-      ctx.arcTo(x + w, y + h, x, y + h, r);
-      ctx.arcTo(x, y + h, x, y, r);
-      ctx.arcTo(x, y, x + w, y, r);
-      ctx.closePath();
-    };
-    if (T.frame === 'double') {
-      ctx.lineWidth = 3; rr(40, 40, W - 80, H - 80, 30); ctx.stroke();
-      ctx.lineWidth = 1.5; rr(54, 54, W - 108, H - 108, 22); ctx.stroke();
-    } else if (T.frame === 'notebook') {
-      // линованная бумага, поле и кусочки скотча
-      ctx.strokeStyle = '#E8E0D3'; ctx.lineWidth = 2;
-      for (let y = 150; y < H - 60; y += 48) { ctx.beginPath(); ctx.moveTo(30, y); ctx.lineTo(W - 30, y); ctx.stroke(); }
-      ctx.strokeStyle = T.frameColor; ctx.lineWidth = 2.5;
-      ctx.beginPath(); ctx.moveTo(112, 0); ctx.lineTo(112, H); ctx.stroke();
-      const tape = (x, y, w, rot, color) => {
-        ctx.save(); ctx.translate(x, y); ctx.rotate(rot); ctx.globalAlpha = 0.75; ctx.fillStyle = color;
-        ctx.beginPath(); ctx.moveTo(-w / 2, -18);
-        for (let i = 0; i <= 6; i++) ctx.lineTo(-w / 2 + (w * i) / 6, -18 + (i % 2 ? 3 : -2));
-        for (let i = 6; i >= 0; i--) ctx.lineTo(-w / 2 + (w * i) / 6, 18 + (i % 2 ? -2 : 3));
-        ctx.closePath(); ctx.fill(); ctx.restore();
-      };
-      tape(W / 2, 40, 220, -0.03, '#EBC9C3');
-      tape(W / 2 + 10, H - 40, 200, 0.04, '#CBD6BD');
-    } else if (T.frame === 'wash') {
-      const blob = (x, y, r, color) => {
-        const g = ctx.createRadialGradient(x, y, r * 0.1, x, y, r);
-        g.addColorStop(0, color); g.addColorStop(1, 'rgba(255,255,255,0)');
-        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
-      };
-      blob(120, 110, 260, 'rgba(175,195,217,.45)');
-      blob(W - 120, 140, 240, 'rgba(235,186,180,.45)');
-      blob(140, H - 120, 250, 'rgba(242,215,149,.40)');
-      blob(W - 130, H - 130, 260, 'rgba(188,200,171,.45)');
-      ctx.globalAlpha = 0.7; ctx.lineWidth = 2; rr(48, 48, W - 96, H - 96, 8); ctx.stroke();
-    } else if (T.frame === 'dots') {
-      const inset = 46, step = 28;
-      const pts = [];
-      for (let x = inset; x <= W - inset; x += step) { pts.push([x, inset]); pts.push([x, H - inset]); }
-      for (let y = inset + step; y < H - inset; y += step) { pts.push([inset, y]); pts.push([W - inset, y]); }
-      pts.forEach(([x, y], i) => {
-        ctx.fillStyle = i % 4 < 2 ? T.frameColor : '#C9D3BB';
-        ctx.beginPath(); ctx.arc(x, y, 5, 0, Math.PI * 2); ctx.fill();
-      });
-    }
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(x, y - r);
+    ctx.quadraticCurveTo(x, y, x + r, y);
+    ctx.quadraticCurveTo(x, y, x, y + r);
+    ctx.quadraticCurveTo(x, y, x - r, y);
+    ctx.quadraticCurveTo(x, y, x, y - r);
+    ctx.fill();
     ctx.restore();
+  },
+
+  star8(ctx, x, y, r, color, rot = 0) {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(rot);
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    for (let i = 0; i < 16; i++) {
+      const a = (Math.PI * 2 * i) / 16 - Math.PI / 2;
+      const rr = i % 2 ? r * 0.44 : r;
+      if (i) ctx.lineTo(rr * Math.cos(a), rr * Math.sin(a)); else ctx.moveTo(rr * Math.cos(a), rr * Math.sin(a));
+    }
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  },
+
+  blob(ctx, cx, cy, r, rnd, fill) {
+    const n = 7, pts = [];
+    for (let i = 0; i < n; i++) {
+      const a = (Math.PI * 2 * i) / n;
+      const rr = r * (0.75 + rnd() * 0.45);
+      pts.push([cx + rr * Math.cos(a), cy + rr * Math.sin(a)]);
+    }
+    ctx.fillStyle = fill;
+    ctx.beginPath();
+    const mid = (p, q) => [(p[0] + q[0]) / 2, (p[1] + q[1]) / 2];
+    let m = mid(pts[n - 1], pts[0]);
+    ctx.moveTo(m[0], m[1]);
+    for (let i = 0; i < n; i++) {
+      const p = pts[i], q = pts[(i + 1) % n];
+      m = mid(p, q);
+      ctx.quadraticCurveTo(p[0], p[1], m[0], m[1]);
+    }
+    ctx.fill();
+  },
+
+  background(ctx, T, W, H, rnd) {
+    const key = Object.keys(CARD_THEMES).find((k) => CARD_THEMES[k] === T);
+    if (key === 'aura') {
+      const g = ctx.createLinearGradient(0, 0, 0, H);
+      g.addColorStop(0, '#DDB0E8'); g.addColorStop(0.35, '#FFE7EE'); g.addColorStop(0.75, '#FFF2D8'); g.addColorStop(1, '#F6EE9A');
+      ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+      const r = ctx.createRadialGradient(W / 2, H * 0.52, 20, W / 2, H * 0.52, Math.max(W, H) * 0.55);
+      r.addColorStop(0, 'rgba(243,71,127,.95)'); r.addColorStop(0.45, 'rgba(255,150,180,.7)'); r.addColorStop(0.8, 'rgba(255,240,220,0)');
+      ctx.fillStyle = r; ctx.fillRect(0, 0, W, H);
+    } else if (key === 'sunset') {
+      ctx.fillStyle = '#F7A6B4'; ctx.fillRect(0, 0, W, H);
+      const blobs = [[80, 220, 420, ['#E8335E', '#F57C6B']], [W - 40, 60, 320, ['#E23A4E', '#F7A6B4']], [W - 60, H - 160, 420, ['#F6A04D', '#EC5C6A']], [120, H - 80, 300, ['#F27FA0', '#F7A6B4']]];
+      for (const [x, y, rr, [c1, c2]] of blobs) {
+        const gg = ctx.createRadialGradient(x, y, 10, x, y, rr);
+        gg.addColorStop(0, c1); gg.addColorStop(1, c2);
+        this.blob(ctx, x, y, rr, rnd, gg);
+      }
+    } else {
+      ctx.fillStyle = T.bg; ctx.fillRect(0, 0, W, H);
+      if (key === 'lavender') {
+        this.blob(ctx, W - 90, 150, 230, rnd, 'rgba(249,168,212,.75)');
+        this.blob(ctx, 60, H - 220, 260, rnd, 'rgba(249,168,212,.65)');
+        this.blob(ctx, W - 40, H - 40, 160, rnd, 'rgba(180,148,248,.45)');
+      } else {
+        this.blob(ctx, 40, 120, 220, rnd, 'rgba(255,200,150,.6)');
+        this.blob(ctx, W - 60, H - 200, 260, rnd, 'rgba(255,170,190,.45)');
+      }
+    }
+  },
+
+  decor(ctx, T, W, H, rnd) {
+    const key = Object.keys(CARD_THEMES).find((k) => CARD_THEMES[k] === T);
+    const spark = key === 'lemon' ? ['#ED7C30', '#F3619C'] : key === 'lavender' ? ['#FB4645', '#FFFFFF'] : ['#FFFFFF', '#FFF6E0'];
+    const stars = key === 'lemon' ? ['#ED7C30', '#F3619C'] : key === 'lavender' ? ['#FB4645', '#F8D34A'] : ['#E8335E', '#FFFFFF'];
+    // крупные звёзды по краям
+    this.star8(ctx, 90, 110, 70, stars[0], 0.2);
+    this.star8(ctx, W - 80, H - 120, 80, stars[1], -0.1);
+    this.star8(ctx, W - 120, 260, 34, stars[0], 0.4);
+    // россыпь искорок
+    const spots = [[150, 300], [W - 70, 420], [60, H * 0.45], [W - 90, H * 0.62], [140, H - 260], [W / 2 + 330, 120], [W / 2 - 360, H - 120], [W - 200, H - 300], [210, 190]];
+    spots.forEach(([x, y], i) => this.sparkle(ctx, x, y, 14 + (i % 3) * 9, spark[i % 2]));
+  },
+
+  grain(ctx, W, H, rnd) {
+    const n = Math.floor((W * H) / 45);
+    for (let i = 0; i < n; i++) {
+      ctx.fillStyle = rnd() < 0.5 ? 'rgba(255,255,255,.22)' : 'rgba(80,30,60,.06)';
+      ctx.fillRect(rnd() * W, rnd() * H, 1.6, 1.6);
+    }
   },
 
   async render(h, rmap) {
     await this.fonts();
-    const T = CARD_THEMES[h.theme] || CARD_THEMES.journal;
+    const T = CARD_THEMES[h.theme] || CARD_THEMES.aura;
     const W = this.W;
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
@@ -247,34 +283,33 @@ const MenuCard = {
     canvas.height = H;
     const rnd = this.rand(h.id || h.title);
 
-    ctx.fillStyle = T.bg;
-    ctx.fillRect(0, 0, W, H);
-    // лёгкая «бумага»
-    ctx.fillStyle = 'rgba(120, 95, 60, 0.035)';
-    for (let i = 0; i < 1800; i++) ctx.fillRect(rnd() * W, rnd() * H, 2, 2);
+    this.background(ctx, T, W, H, rnd);
+    this.grain(ctx, W, H, rnd);
+    this.decor(ctx, T, W, H, rnd);
 
-    this.frame(ctx, T, W, H, rnd);
-
-    const place = [];
-    const cs = 220;
-    const cpos = [[8, 4, -10], [W - cs - 8, 4, 10], [8, H - cs - 4, 8], [W - cs - 8, H - cs - 4, -8]];
-    T.corners.forEach((d, i) => place.push([d, cpos[i][0], cpos[i][1], cs, cpos[i][2]]));
-    const ss = 130;
-    T.sides.forEach((d, i) => {
-      const left = i % 2 === 0;
-      const yy = H * (0.38 + 0.26 * Math.floor(i / 2)) - ss / 2;
-      place.push([d, left ? 2 : W - ss - 2, yy, ss, left ? -12 : 12]);
-    });
-    const imgs = await Promise.all(place.map(([d]) => this.doodle(d)));
-    imgs.forEach((img, i) => {
-      if (!img) return;
-      const [, x, y, s, rot] = place[i];
+    if (T.paper) {
+      // бумажная карточка для текста, как меню на фоне
       ctx.save();
-      ctx.translate(x + s / 2, y + s / 2);
-      ctx.rotate((rot * Math.PI) / 180);
-      ctx.drawImage(img, -s / 2, -s / 2, s, s);
+      ctx.shadowColor = 'rgba(90,20,60,.18)'; ctx.shadowBlur = 40; ctx.shadowOffsetY = 12;
+      ctx.fillStyle = 'rgba(255,250,246,.76)';
+      const x = 140, y = 140, w = W - 280, hh = H - 280, r = 56;
+      ctx.beginPath();
+      ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + hh, r); ctx.arcTo(x + w, y + hh, x, y + hh, r);
+      ctx.arcTo(x, y + hh, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); ctx.fill();
       ctx.restore();
-    });
+      this.star8(ctx, x + w - 10, y + 16, 26, '#F8D34A', 0.3);
+    }
+
+    if (T.corners) {
+      const imgs = await Promise.all(T.corners.map((d) => this.doodle(d)));
+      const cs = 170;
+      const pos = [[20, H * 0.3, -10], [W - cs - 20, H * 0.42, 10], [20, H * 0.7, 8], [W - cs - 20, H * 0.82, -8]];
+      imgs.forEach((img, i) => {
+        if (!img) return;
+        const [x, y, rot] = pos[i];
+        ctx.save(); ctx.translate(x + cs / 2, y + cs / 2); ctx.rotate((rot * Math.PI) / 180); ctx.drawImage(img, -cs / 2, -cs / 2, cs, cs); ctx.restore();
+      });
+    }
 
     this.layout(ctx, h, rmap, T, true);
     return canvas;

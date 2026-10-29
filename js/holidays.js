@@ -23,9 +23,9 @@ async function viewHolidays() {
   const past = all.filter((h) => h.date && daysUntil(h.date) < 0).sort((a, b) => b.date.localeCompare(a.date));
   const card = (h, i) => {
     const d = h.date ? dateObj(h.date) : null;
-    const T = CARD_THEMES[h.theme] || CARD_THEMES.journal;
+    const T = CARD_THEMES[h.theme] || CARD_THEMES.aura;
     const n = (h.items || []).length;
-    return `<a class="hcard" href="#/holiday/${h.id}" style="--accent:${T.title};--hbg:${T.bg}">
+    return `<a class="hcard" href="#/holiday/${h.id}" style="--accent:${T.section};--hbg:${T.css || T.bg}">
       <div class="h-date">${d ? `<b>${d.getDate()}</b><span>${esc(d.toLocaleDateString('ru-RU', { month: 'short' }).replace('.', ''))}</span>` : '<b>?</b><span>дата</span>'}</div>
       <div class="rc-body">
         <p class="rc-cat">${esc(whenLabel(h.date))}</p>
@@ -48,7 +48,7 @@ async function viewHolidays() {
 async function viewHolidayEdit(id) {
   const h = id ? await DB.get('holidays', id) : null;
   if (id && !h) return { html: topbar('#/holidays') + emptyHTML(Doodles.cake(), 'Праздник не найден', '') };
-  const v = h || { title: '', date: '', guests: '', subtitle: '', signature: '', theme: 'journal', items: [] };
+  const v = h || { title: '', date: '', guests: '', subtitle: '', signature: '', theme: 'aura', items: [] };
   const html = `${topbar(h ? `#/holiday/${h.id}` : '#/holidays')}
     <form class="form" id="holForm" autocomplete="off">
       <h1 class="form-title">${h ? 'правим праздник' : 'новый праздник'}</h1>
@@ -72,7 +72,7 @@ async function viewHolidayEdit(id) {
       if (!title) { toast('Напиши название праздника'); return; }
       const guests = parseInt(el.guests.value, 10);
       const rec = {
-        ...(h || { id: uid(), created: Date.now(), theme: 'journal', items: [] }),
+        ...(h || { id: uid(), created: Date.now(), theme: 'aura', items: [] }),
         title, date: el.date.value, guests: isNaN(guests) ? '' : guests,
         subtitle: el.subtitle.value.trim(), signature: el.signature.value.trim(), updated: Date.now()
       };
@@ -116,7 +116,7 @@ async function viewHoliday(id) {
 
       <section class="block">
         <h2 class="block-title">картинка</h2>
-        <div class="themes">${Object.entries(CARD_THEMES).map(([k, T]) => `<button type="button" class="theme ${k === (CARD_THEMES[h.theme] ? h.theme : 'journal') ? 'on' : ''}" data-theme="${k}" style="--tbg:${T.bg};--tc:${T.title};--ts:${T.section}"><span class="th-sw"><i></i><i></i></span>${esc(T.name)}</button>`).join('')}</div>
+        <div class="themes">${Object.entries(CARD_THEMES).map(([k, T]) => `<button type="button" class="theme ${k === (CARD_THEMES[h.theme] ? h.theme : 'aura') ? 'on' : ''}" data-theme="${k}" style="--tbg:${T.css || T.bg};--tc:${T.title};--ts:${T.section}"><span class="th-sw"><i></i><i></i></span>${esc(T.name)}</button>`).join('')}</div>
         <div class="card-preview"><img id="cardImg" alt="Картинка с меню"><p class="muted small" id="cardWait">Рисую…</p></div>
         <div class="actions">
           <button class="btn" data-act="image">${Icons.share} Отправить картинку</button>

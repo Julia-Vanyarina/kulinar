@@ -8,7 +8,7 @@ const nl2br = (s) => esc(s).replace(/\n/g, '<br>');
 const SLOTS = ['Завтрак', 'Обед', 'Ужин', 'Перекус', 'Десерт'];
 const RECIPE_CATS = ['Десерты', 'Выпечка', 'Завтраки', 'Супы', 'Основное', 'Гарниры', 'Салаты', 'Соусы', 'Заготовки', 'Напитки'];
 const FIND_CATS = ['Сладкое', 'Сыры', 'Хлеб', 'Молочное', 'Мясное', 'Снеки', 'Соусы', 'Напитки', 'Заморозка', 'Фрукты и овощи'];
-const NOTE_COLORS = { butter: '#F7EBCB', sky: '#E1E9F1', rose: '#F5E0DC', sage: '#E4E9DA', cream: '#FFFDF8' };
+const NOTE_COLORS = { butter: '#FBF0BE', rose: '#FFD6E5', sage: '#EADBFB', sky: '#D7E2F6', cream: '#FFE2CF' };
 const TINTS = ['t-olive', 't-butter', 't-blue', 't-pink'];
 
 function isoOf(d) {
@@ -1151,6 +1151,9 @@ window.addEventListener('hashchange', render);
 (async function start() {
   try { if (navigator.storage && navigator.storage.persist) await navigator.storage.persist(); } catch (e) { /* */ }
   if (!location.hash) history.replaceState(null, '', '#/recipes');
+  let added = 0;
+  try { added = await addStarterRecipes(); } catch (e) { console.warn(e); }
   await render();
+  if (added) toast(`В тетрадь добавлено ${added} ${plural(added, 'рецепт', 'рецепта', 'рецептов')}`);
   Updater.init();
 })();
