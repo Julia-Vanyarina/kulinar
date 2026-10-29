@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#FBF7F0">
+  <meta name="color-scheme" content="light">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Тетрадь">
+  <title>Кулинарная тетрадь</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <link rel="icon" type="image/png" href="icons/icon-192.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Amatic+SC:wght@400;700&family=Caveat:wght@500;700&family=Cormorant+Garamond:ital,wght@0,500;0,600;0,700;1,500;1,600;1,700&family=Nunito:wght@400;600;700;800&display=swap">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <!-- Фильтры для рисунков: «акварель» и «тонкий контур» -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+    <defs id="artDefs">
+      <filter id="wc" x="-15%" y="-15%" width="130%" height="130%" color-interpolation-filters="sRGB">
+        <feTurbulence type="fractalNoise" baseFrequency="0.045" numOctaves="3" seed="3" result="noise"/>
+        <feDisplacementMap in="SourceGraphic" in2="noise" scale="3.5" xChannelSelector="R" yChannelSelector="G" result="wob"/>
+        <feTurbulence type="fractalNoise" baseFrequency="0.35" numOctaves="2" seed="8" result="pig"/>
+        <feColorMatrix in="pig" type="matrix" values="0 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 -0.5 1.2" result="pigA"/>
+        <feComposite in="wob" in2="pigA" operator="in" result="tex"/>
+        <feMorphology in="wob" operator="erode" radius="1" result="er"/>
+        <feComposite in="wob" in2="er" operator="out" result="edge"/>
+        <feColorMatrix in="edge" type="matrix" values="0.8 0 0 0 0  0 0.74 0 0 0  0 0 0.7 0 0  0 0 0 0.5 0" result="edgeD"/>
+        <feMerge><feMergeNode in="tex"/><feMergeNode in="edgeD"/></feMerge>
+      </filter>
+      <filter id="ink" x="-5%" y="-5%" width="110%" height="110%">
+        <feTurbulence type="fractalNoise" baseFrequency="0.09" numOctaves="1" seed="2" result="n"/>
+        <feDisplacementMap in="SourceGraphic" in2="n" scale="1.4" xChannelSelector="R" yChannelSelector="G"/>
+      </filter>
+    </defs>
+  </svg>
+
+  <main id="app" aria-live="polite"></main>
+  <nav class="tabbar" id="tabbar" aria-label="Разделы"></nav>
+  <div id="sheet-root"></div>
+  <div id="toast" role="status"></div>
+
+  <script src="js/version.js"></script>
+  <script src="js/db.js"></script>
+  <script src="js/photos.js"></script>
+  <script src="js/ingredients.js"></script>
+  <script src="js/doodles.js"></script>
+  <script src="js/backup.js"></script>
+  <script src="js/places.js"></script>
+  <script src="js/menucard.js"></script>
+  <script src="js/holidays.js"></script>
+  <script src="js/mouse.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
