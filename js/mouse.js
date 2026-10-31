@@ -83,8 +83,12 @@ const MouseHelper = {
     if (screen === 'session' && ctx.session) {
       const x = ctx.session;
       if (x.status !== 'active') return { mood: 'happy', text: 'Красиво получилось! Каждая готовка — новая страничка в истории рецепта.', actions: [] };
-      if (!(x.have || []).length) return { mood: 'think', text: 'Сначала проверим запасы: отметь продукты, которые уже есть, — остальное я соберу в список покупок.', actions: [] };
-      return { mood: 'idle', text: 'Не забудь в конце сфотографировать результат во вкладке «Фото» — соберём подборку твоих приготовлений.', actions: [] };
+      if (!(x.have || []).length && !(x.doneSteps || []).length) return { mood: 'think', text: 'Сначала проверим запасы: отметь продукты, которые уже есть, — остальное я соберу в список покупок.', actions: [] };
+      const r = await DB.get('recipes', x.recipeId);
+      const pr = r ? stepProgress(r, x) : { total: 0 };
+      if (pr.total && pr.done === pr.total) return { mood: 'happy', text: 'Все шаги готовы! Сфотографируй результат во вкладке «Фото» и заверши готовку.', actions: [] };
+      if (pr.done && pr.next) return { mood: 'idle', text: `Уже ${pr.done} из ${pr.total} шагов — здорово! Дальше: «${pr.next.text}»`, actions: [] };
+      return { mood: 'idle', text: 'Во вкладке «Шаги» отмечай, что уже сделано, — так всегда видно, что осталось. А в конце сфотографируй результат.', actions: [] };
     }
 
     if (screen === 'recipes') {

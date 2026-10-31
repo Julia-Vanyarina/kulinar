@@ -15,6 +15,29 @@ async function recipeSessions(recipeId) {
 function sessionIngredients(r, x) {
   return sumIngredients([{ groups: parseIngredients(r.ingredients), k: x.k || 1 }]);
 }
+// Шаги рецепта, разложенные по этапам, с ключами для отметок «готово»
+function sessionStages(r) {
+  const stages = [];
+  let cur = { title: '', steps: [] };
+  getSteps(r).forEach((s, i) => {
+    if (s.type === 'group') {
+      if (cur.title || cur.steps.length) stages.push(cur);
+      cur = { title: s.text, steps: [] };
+      return;
+    }
+    if (!s.text && !s.photo) return;
+    cur.steps.push({ ...s, key: i + '|' + (s.text || '').slice(0, 40) });
+  });
+  if (cur.title || cur.steps.length) stages.push(cur);
+  return stages.filter((st) => st.steps.length);
+}
+function stepProgress(r, x) {
+  const all = sessionStages(r).flatMap((st) => st.steps);
+  const done = new Set(x.doneSteps || []);
+  const left = all.filter((s) => !done.has(s.key));
+  return { total: all.length, done: all.length - left.length, next: left[0] || null };
+}
+
 function fmtDuration(min) {
   const h = Math.floor(min / 60), m = min % 60;
   return [h ? `${h} ч` : '', m ? `${m} мин` : ''].filter(Boolean).join(' ') || '0 мин';
@@ -114,12 +137,53 @@ async function viewSession(id) {
     };
 
     /* --- Шаги --- */
+    const openStages = new Set();
     const drawSteps = () => {
-      const has = getSteps(recipe).length;
-      body.innerHTML = has
-        ? `<a class="btn ghost wide" href="#/recipe/${recipe.id}/cook" data-act="big-steps" style="margin:0 0 14px">${Icons.play} Крупно, по одному шагу</a>${stepsViewHTML(recipe, x.status === 'active' ? id : null)}`
-        : '<p class="muted">Шаги в рецепте не записаны. Таймер можно поставить во вкладке «Таймеры».</p>';
+      const stages = sessionStages(recipe);
+      if (!stages.length) { body.innerHTML = '<p class="muted">Шаги в рецепте не записаны. Таймер можно поставить во вкладке «Таймеры».</p>'; return; }
+      const done = new Set(x.doneSteps || []);
+      const pr = stepProgress(recipe, x);
+      const active = x.status === 'active';
+      const check = Icons.plus.replace('M12 5v14M5 12h14', 'M5 12l5 5 9-10');
+      let n = 0;
+      body.innerHTML = `
+        <div class="step-progress">
+          <div class="sp-text"><b>${pr.done === pr.total ? 'Все шаги готовы!' : `Готово ${pr.done} из ${pr.total}`}</b>${pr.next ? `<span>Дальше: ${esc(pr.next.text)}</span>` : ''}</div>
+          <div class="cook-progress"><span style="width:${pr.total ? (pr.done / pr.total) * 100 : 0}%"></span></div>
+        </div>
+        <p class="muted small">Нажимай на шаг, когда он готов. Нажатие на название этапа отмечает его целиком.</p>
+        ${stages.map((st, si) => {
+          const allDone = st.steps.every((s) => done.has(s.key));
+          const open = !allDone || openStages.has(si);
+          n = 0;
+          return `<section class="stage ${allDone ? 'done' : ''}">
+            ${st.title || stages.length > 1 ? `<button type="button" class="stage-h" data-stage="${si}">
+              <span class="stage-box">${allDone ? check : ''}</span>
+              <span class="stage-t">${esc(st.title || 'Шаги')}</span>
+              <span class="stage-c">${allDone ? 'готово' : `${st.steps.filter((s) => done.has(s.key)).length}/${st.steps.length}`}</span>
+            </button>` : ''}
+            ${allDone && !open ? `<button type="button" class="stage-more" data-open="${si}">показать шаги</button>` : `<ol class="steps check-steps">${st.steps.map((s) => {
+              n++;
+              const on = done.has(s.key);
+              const t = timerButtons(s.text, recipe.title, active ? id : null);
+              return `<li class="step ${on ? 'on' : ''}" data-step="${esc(s.key)}">
+                <span class="step-n">${on ? check : n}</span>
+                <div class="step-body"><p>${esc(s.text)}</p>
+                  ${t && !on ? `<div class="timer-row">${t}</div>` : ''}
+                  ${s.photo ? `<img class="step-ph" data-photo="${esc(s.photo)}" data-act="zoom" alt="">` : ''}</div>
+              </li>`;
+            }).join('')}</ol>`}
+          </section>`;
+        }).join('')}
+        <a class="btn ghost wide" href="#/recipe/${recipe.id}/cook" data-act="big-steps" style="margin-top:14px">${Icons.play} Крупно, по одному шагу</a>`;
       Photos.hydrate(body);
+    };
+    const toggleSteps = async (keys, on) => {
+      const set = new Set(x.doneSteps || []);
+      for (const k of keys) { if (on) set.add(k); else set.delete(k); }
+      x.doneSteps = [...set];
+      await save();
+      drawSteps();
     };
 
     /* --- Таймеры --- */
@@ -216,6 +280,26 @@ async function viewSession(id) {
         $$('[data-stab]', root).forEach((b) => b.classList.toggle('on', b === tb));
         draw();
         return;
+      }
+      if (state.sessionTab[id] === 'steps') {
+        const op = e.target.closest('[data-open]');
+        if (op) { openStages.add(+op.dataset.open); drawSteps(); return; }
+        const sh = e.target.closest('[data-stage]');
+        if (sh) {
+          const st = sessionStages(recipe)[+sh.dataset.stage];
+          const done = new Set(x.doneSteps || []);
+          const all = st.steps.every((s2) => done.has(s2.key));
+          openStages.delete(+sh.dataset.stage);
+          await toggleSteps(st.steps.map((s2) => s2.key), !all);
+          if (!all) toast(`Этап «${st.title || 'Шаги'}» готов`);
+          return;
+        }
+        const stp = e.target.closest('li[data-step]');
+        if (stp && !e.target.closest('.timer-btn, img')) {
+          const k = stp.dataset.step;
+          await toggleSteps([k], !(x.doneSteps || []).includes(k));
+          return;
+        }
       }
       const li = e.target.closest('.have-list li[data-k]');
       if (li) {
@@ -348,9 +432,10 @@ async function activeStripHTML() {
       const buy = r ? sessionIngredients(r, x).filter((e) => !have.has(e.key) && e.amount != null).length : 0;
       const next = (x.timers || []).filter((t) => !t.done && t.end > Date.now()).sort((a, b) => a.end - b.end)[0];
       const done = (x.timers || []).some((t) => t.done || t.end <= Date.now());
+      const pr = r ? stepProgress(r, x) : { total: 0 };
       return `<a class="nc-card" href="#/session/${x.id}">
         <div class="nc-main"><b>${esc(r ? r.title : x.title)}</b>
-          <span>${buy ? `купить: ${buy}` : 'всё есть'}${next ? ` · ⏰ ${esc(next.label)} — ${esc(Timers.clock(next.end))}` : done ? ' · ⏰ таймер готов!' : ''}</span></div>
+          <span>${pr.total ? `шаги ${pr.done}/${pr.total} · ` : ''}${buy ? `купить: ${buy}` : 'всё есть'}${next ? ` · ⏰ ${esc(next.label)} — ${esc(Timers.clock(next.end))}` : done ? ' · ⏰ таймер готов!' : ''}</span></div>
         ${Icons.right}
       </a>`;
     }).join('')}
