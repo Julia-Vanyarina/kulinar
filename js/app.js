@@ -377,6 +377,7 @@ async function viewRecipe(id) {
     : `<div class="scaler"><span>Умножить на ×</span><input id="kInput" type="number" inputmode="decimal" min="0" step="any" value="${st.k}"><span class="k muted">укажи выход в рецепте, чтобы считать по порциям</span></div>`;
 
   const running = (await activeSessions()).find((x) => x.recipeId === r.id);
+  const noQty = parseIngredients(r.ingredients).flatMap((g) => g.items).filter((it) => it.amount == null && !LOOSE_ITEM.test(it.name)).length;
   const history = await historyHTML(r);
   const html = `${topbar('#/recipes', right)}
     <article class="detail">
@@ -400,6 +401,7 @@ async function viewRecipe(id) {
           <button type="button" class="${st.mode === 'sum' ? 'on' : ''}" data-mode="sum">Всего продуктов</button>
         </div>
         <div id="ingList"></div>
+        ${noQty ? `<div class="qty-banner"><div><b>${noQty} ${plural(noQty, 'продукт', 'продукта', 'продуктов')} без граммовки</b><span>Без неё не работают пересчёт порций, список покупок и точная себестоимость.</span></div><button type="button" class="btn small" data-act="fill-qty">Дописать</button></div>` : ''}
       </section>
 
       ${r.inventory ? `<section class="block"><h2 class="block-title">инвентарь</h2><ul class="inv">${r.inventory.split('\n').map((l) => l.replace(/^\s*[•·*-]\s*/, '').trim()).filter(Boolean).map((l) => `<li>${esc(l)}</li>`).join('')}</ul></section>` : ''}
@@ -439,6 +441,7 @@ async function viewRecipe(id) {
       if (act.dataset.act === 'fav') { r.fav = !r.fav; r.updated = Date.now(); await DB.put('recipes', r); toast(r.fav ? 'Добавлено в избранное' : 'Убрано из избранного'); rerender(); }
       if (act.dataset.act === 'to-menu') addToMenuSheet(r);
       if (act.dataset.act === 'start-cook') startSessionSheet(r);
+      if (act.dataset.act === 'fill-qty') fillQtySheet(r);
       if (act.dataset.act === 'cost') costSheet(r, st.k || 1, base ? st.target : null);
       if (act.dataset.act === 'delete') {
         if (!(await ask(`Удалить рецепт «${r.title}»? Он пропадёт и из меню.`))) return;
@@ -449,6 +452,57 @@ async function viewRecipe(id) {
     });
   };
   return { html, bind, mouse: { recipe: r } };
+}
+
+// Быстро дописать граммовки продуктам, у которых их нет
+function fillQtySheet(r) {
+  const rows = [];
+  for (const g of parseIngredients(r.ingredients)) {
+    if (g.title) rows.push({ type: 'group', name: g.title });
+    for (const it of g.items) rows.push({ type: 'item', name: it.name, amount: it.amount, unit: it.unit, note: it.note });
+  }
+  const todo = rows.map((row, i) => ({ row, i })).filter(({ row }) => row.type === 'item' && row.amount == null && !LOOSE_ITEM.test(row.name));
+  // «Вода — немного, во время тушения» → название «Вода», а пояснение сохраним в скобках
+  const split = (name) => {
+    const m = name.match(/^(.+?)\s*[—–-]\s+(.+)$/);
+    return m ? { name: m[1].trim(), hint: m[2].trim() } : { name, hint: '' };
+  };
+  openSheet(`<h3 class="sheet-title">Дописать граммовки</h3>
+    <p class="muted small">Впиши, сколько уходит на рецепт${r.yieldCount ? ` (на ${fmtAmount(+r.yieldCount)} ${esc(r.yieldUnit || 'порц.')})` : ''}. Пустые поля можно пропустить.</p>
+    <div class="qty-fill">${todo.map(({ row, i }) => {
+      const sp = split(row.name);
+      return `<div class="qf" data-i="${i}">
+        <input class="qf-n" value="${esc(sp.name)}">
+        ${sp.hint ? `<span class="qf-h">${esc(sp.hint)}</span>` : ''}
+        <div class="qf-in"><input class="qf-a" inputmode="decimal" placeholder="сколько"><input class="qf-u" list="unitList" value="г" placeholder="г"></div>
+      </div>`;
+    }).join('')}</div>
+    <datalist id="unitList"><option value="г"><option value="кг"><option value="мл"><option value="л"><option value="шт"><option value="ст.л."><option value="ч.л."><option value="упаковка"><option value="по вкусу"></datalist>
+    <div class="row-btns"><button class="btn ghost" data-close>Отмена</button><button class="btn" data-save>Сохранить</button></div>`, (s) => {
+    $('[data-save]', s).onclick = async () => {
+      let filled = 0;
+      for (const el of $$('.qf', s)) {
+        const row = rows[+el.dataset.i];
+        const hint = $('.qf-h', el) ? $('.qf-h', el).textContent : '';
+        const name = $('.qf-n', el).value.trim() || row.name;
+        const a = parseFloat($('.qf-a', el).value.replace(',', '.'));
+        const u = $('.qf-u', el).value.trim();
+        if (!isNaN(a) && a > 0) {
+          row.name = name; row.amount = a; row.unit = u; row.note = hint ? `(${hint})` : row.note;
+          filled++;
+        } else if (u && /вкус/i.test(u)) { row.name = `${name} по вкусу`; filled++; }
+      }
+      if (!filled) { toast('Впиши хотя бы одно количество'); return; }
+      const fresh = await DB.get('recipes', r.id);
+      fresh.ingredients = serializeIngredients(rows);
+      fresh.updated = Date.now();
+      await DB.put('recipes', fresh);
+      delete state.scale[r.id];
+      closeSheet();
+      toast(`Дописано: ${filled}`);
+      rerender();
+    };
+  });
 }
 
 async function deleteRecipe(r) {
@@ -789,13 +843,15 @@ async function menuItemSheet(date, mid, rmap) {
   if (!it) return;
   const r = it.recipeId ? rmap.get(it.recipeId) : null;
   const html = `<h3 class="sheet-title">${esc(r ? r.title : it.text)}</h3>
-    ${r ? `<a class="btn ghost wide" href="#/recipe/${r.id}" data-close>Открыть рецепт</a>` : `<label class="field"><span>Блюдо</span><input id="miText" value="${esc(it.text)}"></label>`}
+    ${r ? `<div class="row-btns tight" style="margin:0 0 14px"><button type="button" class="btn" data-cook>${Icons.play} Начать готовить</button><a class="btn ghost" href="#/recipe/${r.id}" data-close>Рецепт</a></div>` : `<label class="field"><span>Блюдо</span><input id="miText" value="${esc(it.text)}"></label>`}
     <label class="field"><span>День</span><input type="date" id="miDate" value="${date}"></label>
     <div class="field"><span>Когда</span>${chipsHTML(SLOTS.map((s) => [s, s]), it.slot, 'slot')}</div>
     <label class="field"><span>Порций</span><input id="miServ" type="number" inputmode="decimal" step="any" min="0" value="${it.servings ?? ''}"></label>
     <div class="row-btns"><button class="btn ghost danger-text" data-del>${Icons.trash} Убрать</button><button class="btn" data-save>Сохранить</button></div>`;
   openSheet(html, (s) => {
     let slot = it.slot;
+    const ck = $('[data-cook]', s);
+    if (ck) ck.onclick = () => { closeSheet(); startSessionSheet(r, { target: it.servings || null }); };
     s.addEventListener('click', (e) => {
       const c = e.target.closest('[data-slot]');
       if (c) { slot = c.dataset.slot; $$('[data-slot]', s).forEach((b) => b.classList.toggle('on', b === c)); }

@@ -763,3 +763,30 @@ button.heart .ic { width: 30px; height: 30px; }
 .check-steps .step.on p { text-decoration: line-through; text-decoration-color: rgba(59,35,64,.35); }
 .check-steps .step.on .step-n { background: linear-gradient(135deg, #8BCF8F, #5DAE6B) !important; }
 .check-steps .step-n .ic { width: 17px; height: 17px; stroke-width: 2.6; color: #fff; }
+
+/* ===== v1.11: инструкция для быстрой команды ===== */
+.howto-wrap { margin: 10px 0 4px; padding: 10px 14px; border-radius: 18px; background: rgba(255,255,255,.7); box-shadow: var(--shadow); }
+.howto-wrap summary { cursor: pointer; font-weight: 800; font-size: 14px; color: var(--pink); }
+.howto { margin: 10px 0 6px; padding-left: 20px; font-size: 14px; line-height: 1.45; }
+.howto li { margin-bottom: 6px; }
+.howto-wrap .btn { margin-top: 6px; }
+
+/* ===== v1.12 ===== */
+.qty-banner { display: flex; align-items: center; gap: 12px; margin-top: 12px; padding: 12px 14px; border-radius: 18px; background: linear-gradient(135deg, #FFF1C9, #FFDCCB); }
+.qty-banner b { display: block; font-size: 14px; }
+.qty-banner span { display: block; font-size: 12.5px; color: var(--ink-2); }
+.qty-banner .btn { flex: none; }
+.qty-fill { display: flex; flex-direction: column; gap: 10px; }
+.qf { padding: 12px; border-radius: 18px; background: var(--card-2); box-shadow: var(--shadow); }
+.qf input { width: 100%; min-width: 0; padding: 10px 12px; border-radius: 12px; border: 0; background: #fff; box-shadow: inset 0 0 0 1.5px var(--line); font: inherit; font-size: 16px; color: var(--ink); outline: none; -webkit-appearance: none; appearance: none; }
+.qf .qf-n { font-weight: 800; }
+.qf-h { display: block; margin: 4px 2px 0; font-size: 12.5px; color: var(--ink-2); }
+.qf-in { display: grid; grid-template-columns: 1fr 96px; gap: 8px; margin-top: 8px; }
+.qf-a { text-align: right; }
+.pill-btn { border: 0; cursor: pointer; color: var(--ink); }
+.pill-btn .ic { width: 14px; height: 14px; color: var(--pink); }
+.sp-cover { position: absolute; left: 6px; bottom: 6px; display: inline-flex; align-items: center; gap: 3px; height: 26px; padding: 0 9px; border: 0; border-radius: 99px; background: rgba(255,255,255,.92); color: var(--pink); font-size: 11px; font-weight: 800; cursor: pointer; }
+.sp-cover .ic { width: 12px; height: 12px; }
+.cover-pick { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 12px 0 4px; }
+.cover-pick button { padding: 0; border: 0; border-radius: 18px; overflow: hidden; aspect-ratio: 1; box-shadow: var(--shadow); cursor: pointer; background: var(--card); }
+.cover-pick img { width: 100%; height: 100%; object-fit: cover; }

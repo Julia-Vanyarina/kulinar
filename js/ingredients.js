@@ -97,7 +97,8 @@ function parseIngredients(text) {
   parsed.forEach((p, i) => {
     if (p.item) { cur.items.push(p.item); return; }
     const next = parsed[i + 1];
-    const isHeader = /:$/.test(p.raw) || (!LOOSE_ITEM.test(p.raw) && next && next.item && p.raw.length <= 60);
+    // «Специи — капля» — это продукт без количества, а не название этапа
+    const isHeader = /:$/.test(p.raw) || (!LOOSE_ITEM.test(p.raw) && !/\s[—–-]\s/.test(p.raw) && next && next.item && p.raw.length <= 60);
     if (isHeader) {
       if (cur.title || cur.items.length) groups.push(cur);
       cur = { title: p.raw.replace(/:$/, ''), items: [] };

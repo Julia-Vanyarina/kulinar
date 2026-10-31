@@ -44,22 +44,26 @@ function fmtDuration(min) {
 }
 
 /* ---------- Начать готовить ---------- */
-async function startSessionSheet(r) {
-  const running = (await activeSessions()).find((x) => x.recipeId === r.id);
-  if (running) { location.hash = `#/session/${running.id}`; return; }
+// opts: { target } — предзаполнить количество (например, из меню недели); { session } — изменить количество у идущей готовки
+async function startSessionSheet(r, opts = {}) {
+  const editing = opts.session || null;
+  if (!editing) {
+    const running = (await activeSessions()).find((x) => x.recipeId === r.id);
+    if (running) { location.hash = `#/session/${running.id}`; return; }
+  }
   const base = +r.yieldCount || 0;
   const pBase = +r.portionSize || 0;
-  const st = state.scale[r.id] || {};
+  const st = editing ? { target: editing.target, portion: editing.portion, k: editing.k } : { ...(state.scale[r.id] || {}), ...(opts.target ? { target: opts.target } : {}) };
   const unit = r.yieldUnit || 'порц.';
-  openSheet(`<h3 class="sheet-title">Готовим «${esc(r.title)}»</h3>
+  openSheet(`<h3 class="sheet-title">${editing ? 'Сколько готовим?' : `Готовим «${esc(r.title)}»`}</h3>
     ${base ? `<p class="muted small">Сколько будешь готовить? Продукты пересчитаются.</p>
       <div class="scaler">
         <span>На</span><input id="ssT" type="number" inputmode="decimal" min="0" step="any" value="${st.target ?? base}"><span>${esc(unit)}</span>
         ${pBase ? `<span class="por">по <input id="ssP" type="number" inputmode="decimal" min="0" step="any" value="${st.portion ?? pBase}"> ${esc(r.portionUnit || 'мл')}</span>` : ''}
       </div>`
     : `<p class="muted small">Во сколько раз увеличить рецепт?</p><div class="scaler"><span>×</span><input id="ssK" type="number" inputmode="decimal" min="0" step="any" value="${st.k || 1}"></div>`}
-    <p class="hint" style="margin-top:12px">Дальше отметишь продукты, которые уже есть, — и сразу будет видно, что купить. Таймеры и фото результата тоже будут здесь.</p>
-    <div class="row-btns"><button class="btn ghost" data-close>Отмена</button><button class="btn" data-go>${Icons.play} Начать</button></div>`, (s) => {
+    <p class="hint" style="margin-top:12px">${editing ? 'Граммы в продуктах и списке покупок пересчитаются, отметки «уже есть» сохранятся.' : 'Дальше отметишь продукты, которые уже есть, — и сразу будет видно, что купить. Таймеры и фото результата тоже будут здесь.'}</p>
+    <div class="row-btns"><button class="btn ghost" data-close>Отмена</button><button class="btn" data-go>${editing ? 'Пересчитать' : `${Icons.play} Начать`}</button></div>`, (s) => {
     $('[data-go]', s).onclick = async () => {
       const num = (id) => { const el = $(id, s); return el ? parseFloat(el.value.replace(',', '.')) || 0 : null; };
       let target = null, portion = null, k = 1;
@@ -68,11 +72,51 @@ async function startSessionSheet(r) {
         portion = pBase ? (num('#ssP') || pBase) : null;
         k = (target / base) * (pBase ? portion / pBase : 1);
       } else k = num('#ssK') || 1;
+      if (editing) {
+        const fresh = await DB.get('sessions', editing.id);
+        Object.assign(fresh, { target, portion, k });
+        await DB.put('sessions', fresh);
+        closeSheet();
+        toast('Количество изменено — продукты пересчитаны');
+        rerender();
+        return;
+      }
       const x = { id: uid(), recipeId: r.id, title: r.title, status: 'active', started: Date.now(), finished: null, target, portion, k, have: [], timers: [], photos: [], note: '' };
       await DB.put('sessions', x);
       closeSheet();
       location.hash = `#/session/${x.id}`;
     };
+  });
+}
+
+/* ---------- Обложка рецепта из фото готовки ---------- */
+// Копируем фото, чтобы обложка не пропала, если потом удалить запись о готовке
+async function setRecipeCover(recipeId, photoId) {
+  const src = await DB.get('photos', photoId);
+  const r = await DB.get('recipes', recipeId);
+  if (!src || !r) return;
+  const id = uid();
+  await DB.put('photos', { id, blob: src.blob });
+  r.photos = [id, ...(r.photos || [])];
+  r.updated = Date.now();
+  await DB.put('recipes', r);
+  toast('Фото стало обложкой рецепта');
+}
+
+function coverAfterFinish(r, x) {
+  openSheet(`<h3 class="sheet-title">Готово! 🎉</h3>
+    <p>Фото добавлены в «Мои приготовления». Сделать одно из них обложкой рецепта?</p>
+    <div class="cover-pick">${x.photos.map((p) => `<button type="button" data-pick="${esc(p)}"><img data-photo="${esc(p)}" alt=""></button>`).join('')}</div>
+    <div class="row-btns"><button class="btn ghost" data-skip>Не надо</button></div>`, (s) => {
+    Photos.hydrate(s);
+    const go = () => { closeSheet(); location.hash = `#/recipe/${r.id}`; };
+    $('[data-skip]', s).onclick = go;
+    s.addEventListener('click', async (e) => {
+      const b = e.target.closest('[data-pick]');
+      if (!b) return;
+      await setRecipeCover(r.id, b.dataset.pick);
+      go();
+    });
   });
 }
 
@@ -94,7 +138,7 @@ async function viewSession(id) {
       <h1 class="detail-title">${esc(recipe.title)}</h1>
       <div class="meta-row">
         <span class="pill">${Icons.clock}${x.status === 'active' ? `начато ${esc(fmtDateTime(x.started))}` : esc(fmtDateTime(x.finished || x.started))}</span>
-        ${amount ? `<span class="pill">${esc(amount)}</span>` : ''}
+        ${x.status === 'active' && r ? `<button type="button" class="pill pill-btn" data-act="change-amount">${esc(amount || 'количество')} ${Icons.edit}</button>` : amount ? `<span class="pill">${esc(amount)}</span>` : ''}
       </div>
       <div class="seg sess-tabs">
         <button type="button" data-stab="ings" class="${tab === 'ings' ? 'on' : ''}">Продукты</button>
@@ -196,7 +240,7 @@ async function viewSession(id) {
             <div class="st-main"><b>${esc(t.label)}</b><span>${t.done || Date.now() >= t.end ? 'готово' : `готово ${esc(Timers.clock(t.end))}`}</span></div>
             <div class="st-left" data-end="${t.end}">${t.done || Date.now() >= t.end ? '✓' : Timers.fmt((t.end - Date.now()) / 1000)}</div>
             <div class="st-acts">
-              ${t.done || Date.now() >= t.end ? '' : `<button type="button" class="iconbtn sm" data-cal="${t.id}" aria-label="В Календарь">${Icons.cal}</button>`}
+              ${t.done || Date.now() >= t.end ? '' : `<button type="button" class="iconbtn sm" data-cal="${t.id}" aria-label="Напомнить на iPhone">${Icons.timer}</button>`}
               <button type="button" class="iconbtn sm" data-rmtimer="${t.id}" aria-label="Убрать">${Icons.x}</button>
             </div>
           </li>`).join('')}</ul>` : '<p class="muted">Таймеров пока нет.</p>'}
@@ -211,7 +255,7 @@ async function viewSession(id) {
           <p class="muted small" id="tEnd"></p>
           <button type="button" class="btn wide" data-act="start-timer">${Icons.timer} Запустить</button>
         </div>
-        <p class="hint">Таймер сохраняется: можно закрыть приложение и вернуться — отсчёт продолжится. Но iPhone не даёт веб-приложению звенеть, пока оно закрыто, поэтому для долгих таймеров нажми ${Icons.cal.replace('class="ic"', 'class="ic inline"')} — напоминание добавится в Календарь.</p>` : ''}`;
+        <p class="hint">Таймер сохраняется: можно закрыть приложение и вернуться — отсчёт продолжится. Но iPhone не даёт веб-приложению звенеть, пока оно закрыто, поэтому для долгих таймеров нажми ${Icons.timer.replace('class="ic"', 'class="ic inline"')} у таймера — поставлю настоящий таймер в «Часах» iPhone.</p>` : ''}`;
       const h = $('#tH', body), m = $('#tM', body);
       const showEnd = () => {
         const min = (parseInt(h && h.value, 10) || 0) * 60 + (parseInt(m && m.value, 10) || 0);
@@ -233,7 +277,7 @@ async function viewSession(id) {
       const active = x.status === 'active';
       body.innerHTML = `
         <div class="sess-photos">
-          ${(x.photos || []).map((p) => `<div class="sp"><img data-photo="${esc(p)}" data-act="zoom" alt=""><button type="button" class="thumb-x" data-rmph="${esc(p)}" aria-label="Удалить фото">${Icons.x}</button></div>`).join('')}
+          ${(x.photos || []).map((p) => `<div class="sp"><img data-photo="${esc(p)}" data-act="zoom" alt=""><button type="button" class="thumb-x" data-rmph="${esc(p)}" aria-label="Удалить фото">${Icons.x}</button>${r ? `<button type="button" class="sp-cover" data-cover="${esc(p)}">${Icons.star} обложка</button>` : ''}</div>`).join('')}
           <label class="sp add">${Icons.camera}<span>${(x.photos || []).length ? 'ещё фото' : 'сфотографировать результат'}</span><input type="file" accept="image/*" multiple hidden id="spIn"></label>
         </div>
         <label class="field" style="margin-top:16px"><span>Как получилось</span><textarea id="sNote" rows="3" placeholder="Крем взбился отлично, карамель чуть жидковата…">${esc(x.note || '')}</textarea></label>
@@ -324,6 +368,8 @@ async function viewSession(id) {
       if (rt) { await Timers.remove(rt.dataset.rmtimer); return; }
       const cal = e.target.closest('[data-cal]');
       if (cal) { const t = (x.timers || []).find((y) => y.id === cal.dataset.cal); if (t) addToCalendar(t, recipe.title); return; }
+      const cv = e.target.closest('[data-cover]');
+      if (cv && r) { await setRecipeCover(r.id, cv.dataset.cover); return; }
       const rp = e.target.closest('[data-rmph]');
       if (rp) {
         if (!(await ask('Удалить это фото?'))) return;
@@ -337,6 +383,7 @@ async function viewSession(id) {
       if (!act) return;
       const a = act.dataset.act;
       if (a === 'big-steps') state.cookSession = { recipeId: recipe.id, id };
+      if (a === 'change-amount') startSessionSheet(recipe, { session: x });
       if (a === 'copy-buy') {
         const have = new Set(x.have || []);
         const buy = sessionIngredients(recipe, x).filter((it) => !have.has(it.key));
@@ -354,8 +401,8 @@ async function viewSession(id) {
         if (min >= 60) {
           const t = (await DB.get('sessions', id)).timers.slice(-1)[0];
           openSheet(`<h3 class="sheet-title">Таймер на ${fmtDuration(min)}</h3>
-            <p>Будет готово <b>${esc(Timers.clock(t.end))}</b>. Добавить напоминание в Календарь iPhone? Тогда телефон напомнит, даже если приложение закрыто.</p>
-            <div class="row-btns"><button class="btn ghost" data-close>Не надо</button><button class="btn" data-calnow>${Icons.cal} В Календарь</button></div>`, (s) => {
+            <p>Будет готово <b>${esc(Timers.clock(t.end))}</b>. Поставить напоминание на iPhone? Тогда телефон прозвенит, даже если приложение закрыто.</p>
+            <div class="row-btns"><button class="btn ghost" data-close>Не надо</button><button class="btn" data-calnow>${Icons.timer} Напомнить</button></div>`, (s) => {
             $('[data-calnow]', s).onclick = () => { closeSheet(); addToCalendar(t, recipe.title); };
           });
         }
@@ -366,7 +413,8 @@ async function viewSession(id) {
         x.note = ($('#sNote', body) || {}).value ? $('#sNote', body).value.trim() : x.note;
         await save();
         await Timers.loadSessions();
-        toast((x.photos || []).length ? 'Готово! Фото добавлены в рецепт' : 'Готовка завершена');
+        if (r && (x.photos || []).length) { coverAfterFinish(r, x); return; }
+        toast('Готовка завершена');
         location.hash = r ? `#/recipe/${r.id}` : '#/recipes';
       }
       if (a === 'reopen') { x.status = 'active'; await save(); await Timers.loadSessions(); rerender(); }
@@ -391,32 +439,60 @@ async function viewSession(id) {
   };
 }
 
-/* ---------- Напоминание в Календарь (.ics) ---------- */
-function addToCalendar(t, title) {
+/* ---------- Напоминание на iPhone ---------- */
+// 1) Таймер в приложении «Часы» через быструю команду «Тетрадь таймер» — звенит даже при закрытом приложении.
+// 2) Запасной вариант — событие для Календаря (.ics).
+const SHORTCUT_NAME = 'Тетрадь таймер';
+
+function icsData(t, title) {
   const z = (n) => String(n).padStart(2, '0');
   const utc = (ts) => { const d = new Date(ts); return `${d.getUTCFullYear()}${z(d.getUTCMonth() + 1)}${z(d.getUTCDate())}T${z(d.getUTCHours())}${z(d.getUTCMinutes())}${z(d.getUTCSeconds())}Z`; };
-  const clean = (s) => String(s).replace(/[\\;,]/g, (c) => '\\' + c).replace(/\n/g, ' ');
-  const ics = [
-    'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Kulinar//RU', 'CALSCALE:GREGORIAN',
+  const clean = (str) => String(str).replace(/[\\;,]/g, (c) => '\\' + c).replace(/\n/g, ' ');
+  return [
+    'BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//Kulinar//RU', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH',
     'BEGIN:VEVENT', `UID:${t.id}@kulinar`, `DTSTAMP:${utc(Date.now())}`, `DTSTART:${utc(t.end)}`, `DTEND:${utc(t.end + 15 * 60000)}`,
     `SUMMARY:${clean('⏰ ' + t.label)}`, `DESCRIPTION:${clean('Кулинарная тетрадь — ' + title)}`,
     'BEGIN:VALARM', 'ACTION:DISPLAY', `DESCRIPTION:${clean(t.label)}`, 'TRIGGER:PT0M', 'END:VALARM',
     'END:VEVENT', 'END:VCALENDAR'
   ].join('\r\n');
-  const blob = new Blob([ics], { type: 'text/calendar;charset=utf-8' });
-  const file = new File([blob], 'timer.ics', { type: 'text/calendar' });
+}
+
+function shortcutHelpHTML() {
+  return `<ol class="howto">
+    <li>Открой приложение <b>«Команды»</b> на iPhone (иконка с цветными квадратиками; если его нет — скачай бесплатно в App Store).</li>
+    <li>Нажми <b>«+»</b> справа вверху.</li>
+    <li>Нажми <b>«Добавить действие»</b>, в поиске набери <b>«таймер»</b> и выбери <b>«Запустить таймер»</b>.</li>
+    <li>В действии нажми на число (например, «30») → <b>«Выбрать переменную»</b> → <b>«Ввод быстрой команды»</b>. Единицы оставь <b>«мин»</b>.</li>
+    <li>Сверху нажми на название и назови команду точно так: <b>${SHORTCUT_NAME}</b>. Нажми <b>«Готово»</b>.</li>
+  </ol>
+  <p class="hint">Это нужно сделать один раз. Потом кнопка «Таймер в „Часах“» будет сразу ставить настоящий таймер iPhone — он прозвенит, даже если телефон заблокирован, а приложение закрыто.</p>`;
+}
+
+async function phoneReminder(t, title) {
+  const minutes = Math.max(1, Math.round((t.end - Date.now()) / 60000));
+  const ready = await DB.getMeta('shortcutReady', false);
+  const ics = icsData(t, title);
+  const dataUrl = 'data:text/calendar;charset=utf-8,' + encodeURIComponent(ics);
+  const file = new File([ics], 'timer.ics', { type: 'text/calendar' });
   let canShare = false;
   try { canShare = !!(navigator.canShare && navigator.canShare({ files: [file] })); } catch (e) { /* */ }
-  const url = URL.createObjectURL(blob);
-  openSheet(`<h3 class="sheet-title">Напоминание в Календарь</h3>
-    <p class="muted">«${esc(t.label)}» — ${esc(Timers.clock(t.end))}. Нажми «Открыть» — iPhone предложит «Добавить в календарь».</p>
-    <a class="btn wide" href="${url}" target="_blank" rel="noopener" data-close>${Icons.cal} Открыть</a>
-    ${canShare ? `<button class="btn ghost wide" data-sharecal>${Icons.share} Через «Поделиться»</button>` : ''}
+  const runUrl = `shortcuts://run-shortcut?name=${encodeURIComponent(SHORTCUT_NAME)}&input=text&text=${minutes}`;
+  openSheet(`<h3 class="sheet-title">Напомнить на iPhone</h3>
+    <p class="muted">«${esc(t.label)}» — готово ${esc(Timers.clock(t.end))} (через ${esc(fmtDuration(minutes))}).</p>
+    <a class="btn wide" href="${runUrl}" data-run>${Icons.timer} Таймер в «Часах»</a>
+    ${ready ? '<p class="hint">Откроются «Команды», поставят таймер — потом вернись в тетрадь.</p>' : `<details class="howto-wrap"><summary>Как настроить (один раз, 2 минуты)</summary>${shortcutHelpHTML()}<button type="button" class="btn small ghost" data-ready>Я настроила</button></details>`}
+    <p class="pick-label">или</p>
+    <a class="btn ghost wide" href="${dataUrl}" download="timer.ics">${Icons.cal} Событие в Календарь</a>
+    ${canShare ? `<button class="btn ghost wide" data-sharecal>${Icons.share} Календарь через «Поделиться»</button>` : ''}
+    <p class="hint">Календарь из приложения на экране «Домой» iPhone иногда не открывает. Если не сработало — используй таймер в «Часах».</p>
     <button class="btn ghost wide" data-close>Закрыть</button>`, (s) => {
     const sb = $('[data-sharecal]', s);
     if (sb) sb.onclick = async () => { try { await navigator.share({ files: [file] }); } catch (e) { /* */ } };
+    const rd = $('[data-ready]', s);
+    if (rd) rd.onclick = async () => { await DB.setMeta('shortcutReady', true); toast('Отлично! Теперь таймер ставится одной кнопкой'); closeSheet(); phoneReminder(t, title); };
   });
 }
+function addToCalendar(t, title) { return phoneReminder(t, title); }
 
 /* ---------- Блоки для других экранов ---------- */
 // Полоска «Готовлю сейчас» на главной
