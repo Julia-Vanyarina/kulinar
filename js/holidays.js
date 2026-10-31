@@ -232,7 +232,7 @@ async function viewHoliday(id) {
           const k = base && h.guests ? h.guests / base : 1;
           sources.push({ groups: parseIngredients(r.ingredients), k });
         }
-        showShoppingList(sources, free, h.guests ? `Количество пересчитано на ${h.guests} ${plural(h.guests, 'гостя', 'гостей', 'гостей')} по выходу рецептов.` : 'Укажи число гостей в празднике, чтобы пересчитать продукты.');
+        showShoppingList(sources, free, h.guests ? `Количество пересчитано на ${h.guests} ${plural(h.guests, 'гостя', 'гостей', 'гостей')} по выходу рецептов.` : 'Укажи число гостей в празднике, чтобы пересчитать продукты.', 'hol:' + h.id);
       }
       if (a === 'delete') {
         if (!(await ask(`Удалить праздник «${h.title}»?`))) return;

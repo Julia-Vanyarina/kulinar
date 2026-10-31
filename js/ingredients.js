@@ -24,12 +24,54 @@ function parseLine(line) {
   if (m) return { name: m[1].trim(), amount: num(m[2]), unit: m[3].trim(), note: (m[4] || '').trim() };
   m = line.match(LEAD_RE);
   if (m) {
-    const name = m[3].trim();
+    const name = toNominative(m[3].trim());
     return { name: name.charAt(0).toUpperCase() + name.slice(1), amount: num(m[1]), unit: m[2].trim(), note: '' };
   }
   m = line.match(BARE_RE);
   if (m && !/[%]$/.test(m[1])) return { name: m[1].trim(), amount: num(m[2]), unit: '', note: '' };
   return null;
+}
+
+// «200 г муки» → «мука»: частые продукты в родительном падеже
+const GENITIVE = {
+  муки: 'мука', сахара: 'сахар', соли: 'соль', воды: 'вода', молока: 'молоко', масла: 'масло', сливок: 'сливки', творога: 'творог',
+  сыра: 'сыр', риса: 'рис', крахмала: 'крахмал', шоколада: 'шоколад', мёда: 'мёд', меда: 'мёд', орехов: 'орехи', изюма: 'изюм',
+  желатина: 'желатин', ванилина: 'ванилин', кефира: 'кефир', сметаны: 'сметана', теста: 'тесто', фарша: 'фарш', пудры: 'пудра',
+  яиц: 'яйца', желтков: 'желтки', белков: 'белки', бананов: 'бананы', ягод: 'ягоды', клубники: 'клубника', малины: 'малина',
+  лимона: 'лимон', сока: 'сок', йогурта: 'йогурт', хлопьев: 'хлопья', соды: 'сода', разрыхлителя: 'разрыхлитель', корицы: 'корица',
+  перца: 'перец', лука: 'лук', чеснока: 'чеснок', моркови: 'морковь', картофеля: 'картофель', мяса: 'мясо', курицы: 'курица',
+  сливочного: 'сливочное', растительного: 'растительное', оливкового: 'оливковое', подсолнечного: 'подсолнечное',
+  сахарной: 'сахарная', тростникового: 'тростниковый', коричневого: 'коричневый', тёртого: 'тёртый', тертого: 'тёртый',
+  молотой: 'молотая', молотого: 'молотый', миндальной: 'миндальная', пшеничной: 'пшеничная', рисовой: 'рисовая', кукурузного: 'кукурузный',
+  глюкозного: 'глюкозный', сиропа: 'сироп', какао: 'какао', маскарпоне: 'маскарпоне', печенья: 'печенье', кофе: 'кофе'
+};
+function toNominative(name) {
+  return name.split(/\s+/).map((w) => GENITIVE[w.toLowerCase()] || w).join(' ');
+}
+
+// Приведение единиц к одной: «гр», «грамм» → «г», «кг» → г × 1000, «л» → мл × 1000
+const UNIT_NORM = [
+  [/^(г|гр|грамм[а-я]*|g)\.?$/i, 'г', 1],
+  [/^(кг|kg|килограмм[а-я]*)\.?$/i, 'г', 1000],
+  [/^мг\.?$/i, 'г', 0.001],
+  [/^(мл|ml|миллилитр[а-я]*)\.?$/i, 'мл', 1],
+  [/^(л|l|литр[а-я]*)\.?$/i, 'мл', 1000],
+  [/^(шт|штук[а-я]*|pcs)\.?$/i, 'шт', 1],
+  [/^(ст\.?\s?л\.?|столов[а-я]*\s*лож[а-я]*|tbsp)$/i, 'ст.л.', 1],
+  [/^(ч\.?\s?л\.?|чайн[а-я]*\s*лож[а-я]*|tsp)$/i, 'ч.л.', 1],
+  [/^стак/i, 'стакан', 1]
+];
+function normUnit(unit) {
+  const u = (unit || '').trim();
+  for (const [re, base, k] of UNIT_NORM) if (re.test(u)) return { unit: base, k };
+  return { unit: u.toLowerCase(), k: 1 };
+}
+// Красиво показать количество: 1500 г → 1,5 кг
+function fmtQty(amount, unit) {
+  if (amount == null || isNaN(amount)) return '';
+  if (unit === 'г' && amount >= 1000) return `${fmtAmount(amount / 1000)} кг`;
+  if (unit === 'мл' && amount >= 1000) return `${fmtAmount(amount / 1000)} л`;
+  return `${fmtAmount(amount)}${unit ? ' ' + unit : ''}`;
 }
 
 // Обратно в текст (для хранения): этап — строкой с двоеточием, продукт — «Название — 200 г»
@@ -89,17 +131,18 @@ function ingKey(name, unit) {
   return n + '|' + (unit || '').toLowerCase().replace(/\.$/, '');
 }
 
-// Складывает одинаковые продукты из нескольких списков: [{groups, k}]
+// Складывает одинаковые продукты из нескольких списков: [{groups, k}]. Единицы приводятся к одной.
 function sumIngredients(sources) {
   const map = new Map();
   for (const { groups, k = 1, from } of sources) {
     for (const g of groups) {
       for (const it of g.items) {
-        const key = ingKey(it.name, it.amount == null ? '' : it.unit);
+        const nu = it.amount == null ? { unit: '', k: 1 } : normUnit(it.unit);
+        const key = ingKey(it.name, nu.unit);
         const name = it.name.replace(/\s*\([^)]*\)/g, '').trim() || it.name;
-        if (!map.has(key)) map.set(key, { name, unit: it.unit, amount: it.amount == null ? null : 0, from: new Set() });
+        if (!map.has(key)) map.set(key, { key, name, unit: nu.unit, amount: it.amount == null ? null : 0, from: new Set() });
         const e = map.get(key);
-        if (it.amount != null) e.amount = (e.amount || 0) + it.amount * k;
+        if (it.amount != null) e.amount = (e.amount || 0) + it.amount * nu.k * k;
         if (from) e.from.add(from);
       }
     }

@@ -80,7 +80,21 @@ const MouseHelper = {
     const recipes = ctx.recipes || await DB.all('recipes');
     const rnd = (arr) => arr[Math.floor(Math.random() * arr.length)];
 
+    if (screen === 'session' && ctx.session) {
+      const x = ctx.session;
+      if (x.status !== 'active') return { mood: 'happy', text: 'Красиво получилось! Каждая готовка — новая страничка в истории рецепта.', actions: [] };
+      if (!(x.have || []).length) return { mood: 'think', text: 'Сначала проверим запасы: отметь продукты, которые уже есть, — остальное я соберу в список покупок.', actions: [] };
+      return { mood: 'idle', text: 'Не забудь в конце сфотографировать результат во вкладке «Фото» — соберём подборку твоих приготовлений.', actions: [] };
+    }
+
     if (screen === 'recipes') {
+      const act = await activeSessions();
+      if (act.length) {
+        const ready = act.flatMap((x) => (x.timers || []).filter((t) => t.done || t.end <= Date.now()));
+        return ready.length
+          ? { mood: 'happy', text: `Таймер «${ready[0].label}» готов! Можно продолжать.`, actions: [{ label: 'Открыть', href: `#/session/${act.find((x) => (x.timers || []).includes(ready[0])).id}` }] }
+          : { mood: 'idle', text: `Ты сейчас готовишь «${act[0].title}». Вернёмся к нему?`, actions: [{ label: 'Продолжить', href: `#/session/${act[0].id}` }] };
+      }
       if (state.updateReady) {
         return { mood: 'happy', text: `Вышла новая версия ${state.remote.version}! Обновим? Рецепты и фото останутся на месте.`, actions: [{ label: 'Обновить', run: () => { Updater.apply(); return null; } }] };
       }
@@ -98,6 +112,7 @@ const MouseHelper = {
       return rnd([
         { mood: 'think', text: 'Что сегодня хочется: сладенького или чего-нибудь посытнее?', actions: [{ label: 'Сладкого', run: () => this.suggestMsg(recipes, 'sweet') }, { label: 'Посытнее', run: () => this.suggestMsg(recipes, 'savory') }] },
         { mood: 'think', text: 'Не знаешь, что приготовить? Могу выбрать что-нибудь из избранного.', actions: [{ label: 'Выбери мне', run: () => this.suggestMsg(recipes, 'fav') }] },
+        { mood: 'think', text: 'Скажи, что есть в холодильнике, — подберу, что из этого приготовить.', actions: [{ label: 'Подобрать', run: () => { openPantrySheet(); return null; } }] },
         this.tipMsg()
       ]);
     }
@@ -105,6 +120,7 @@ const MouseHelper = {
     if (screen === 'recipe' && ctx.recipe) {
       const r = ctx.recipe;
       return rnd([
+        { mood: 'happy', text: 'Нажми «Начать готовить»: отметишь, что есть дома, увидишь, что купить, поставишь таймеры, а в конце сфотографируешь результат.', actions: [{ label: 'Начать', run: () => { startSessionSheet(r); return null; } }] },
         { mood: 'think', text: 'Когда приготовишь, расскажи, как получилось. Запишу в заметки к рецепту, что поменять в следующий раз.', actions: [{ label: 'Записать', run: () => { quickRecipeNote(r); return null; } }] },
         r.yieldCount
           ? { mood: 'idle', text: `Нужно на другое количество? Поменяй число в строке «На … ${r.yieldUnit || 'порц.'}», и я пересчитаю все граммы.`, actions: [] }

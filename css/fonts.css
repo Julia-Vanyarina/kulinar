@@ -1,0 +1,12 @@
+/* Шрифты лежат в приложении — работают без интернета. Лицензии: fonts/licenses (SIL Open Font License) */
+@font-face { font-family: 'Caveat'; src: url('../fonts/caveat.woff') format('woff'); font-weight: 400 700; font-display: swap; }
+@font-face { font-family: 'Cormorant Garamond'; src: url('../fonts/cormorant.woff') format('woff'); font-weight: 300 700; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Cormorant Garamond'; src: url('../fonts/cormorant-italic.woff') format('woff'); font-weight: 300 700; font-style: italic; font-display: swap; }
+@font-face { font-family: 'Nunito'; src: url('../fonts/nunito.woff') format('woff'); font-weight: 200 1000; font-display: swap; }
+@font-face { font-family: 'Unbounded'; src: url('../fonts/unbounded.woff') format('woff'); font-weight: 200 900; font-display: swap; }
+@font-face { font-family: 'Marck Script'; src: url('../fonts/marck.woff') format('woff'); font-weight: 400; font-display: swap; }
+@font-face { font-family: 'Playfair Display'; src: url('../fonts/playfair.woff') format('woff'); font-weight: 400 900; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Playfair Display'; src: url('../fonts/playfair-italic.woff') format('woff'); font-weight: 400 900; font-style: italic; font-display: swap; }
+@font-face { font-family: 'Lobster'; src: url('../fonts/lobster.woff') format('woff'); font-weight: 400; font-display: swap; }
+@font-face { font-family: 'Comfortaa'; src: url('../fonts/comfortaa.woff') format('woff'); font-weight: 300 700; font-display: swap; }
+@font-face { font-family: 'Amatic SC'; src: url('../fonts/amatic-bold.woff') format('woff'); font-weight: 700; font-display: swap; }

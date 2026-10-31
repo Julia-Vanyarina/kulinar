@@ -78,6 +78,8 @@ const state = {
   updateReady: false
 };
 let activeEditor = null;
+let stepEditor = null;
+let viewCleanup = null;
 
 /* ===================== Обновления ===================== */
 const Updater = {
@@ -309,14 +311,23 @@ async function viewRecipes() {
     </a>`;
   }).join('');
 
+  const strip = await activeStripHTML();
   const html = `${pageHead('рецепты', all.length ? `${all.length} ${plural(all.length, 'рецепт', 'рецепта', 'рецептов')} в тетради` : 'всё самое вкусное', Doodles.bowl())}
+    ${strip}
     ${all.length ? `${searchHTML('Найти рецепт или продукт')}
+      <button type="button" class="pantry-btn" data-act="pantry">${Icons.fridge}<span>Что приготовить из того, что есть дома?</span>${Icons.right}</button>
       ${chipsHTML([['all', 'Все'], ['fav', '★ Избранное'], ...cats.map((c) => [c, esc(c)])], 'all', 'f')}
       <div class="rlist">${list}</div>
       <p class="no-results" hidden>Ничего не нашлось</p>`
     : emptyHTML(Doodles.cake(), 'Пока пусто', 'Добавь первый рецепт — кнопка с плюсом внизу.')}
     <a class="fab" href="#/recipe/new" aria-label="Новый рецепт">${Icons.plus}</a>`;
-  return { html, bind: (root) => bindListFilter(root, 'f') };
+  return {
+    html,
+    bind: (root) => {
+      bindListFilter(root, 'f');
+      root.addEventListener('click', (e) => { if (e.target.closest('[data-act="pantry"]')) openPantrySheet(); });
+    }
+  };
 }
 
 function scaleNote(note, k) {
@@ -334,7 +345,7 @@ function ingListHTML(r, st) {
     ${g.title ? `<h4 class="ing-group">${esc(g.title)}</h4>` : ''}
     <ul class="ings">${g.items.map((it) => `<li class="ing">
       <span class="ing-n">${esc(it.name)}</span><span class="ing-dots"></span>
-      <span class="ing-a">${it.amount == null ? '' : `${fmtAmount(it.amount)} ${esc(it.unit)}`}</span>
+      <span class="ing-a">${it.amount == null ? '' : esc(fmtQty(it.amount, it.unit))}</span>
       ${it.note ? `<span class="ing-note">${esc(scaleNote(it.note, k))}</span>` : ''}
     </li>`).join('')}</ul>`).join('');
 }
@@ -365,6 +376,8 @@ async function viewRecipe(id) {
     ? `<div class="scaler"><span>На</span><button type="button" class="stepper" data-step="-1">−</button><input id="scaleInput" type="number" inputmode="decimal" min="0" step="any" value="${st.target ?? base}"><button type="button" class="stepper" data-step="1">+</button><span>${esc(unit)}</span>${pBase ? `<span class="por">по <input id="portionInput" type="number" inputmode="decimal" min="0" step="any" value="${st.portion ?? pBase}"> ${esc(pUnit)}</span>` : ''}<span class="k" id="kLabel"></span></div>`
     : `<div class="scaler"><span>Умножить на ×</span><input id="kInput" type="number" inputmode="decimal" min="0" step="any" value="${st.k}"><span class="k muted">укажи выход в рецепте, чтобы считать по порциям</span></div>`;
 
+  const running = (await activeSessions()).find((x) => x.recipeId === r.id);
+  const history = await historyHTML(r);
   const html = `${topbar('#/recipes', right)}
     <article class="detail">
       ${galleryHTML(r.photos, r.id)}
@@ -373,6 +386,10 @@ async function viewRecipe(id) {
       <div class="meta-row">
         ${r.time ? `<span class="pill">${Icons.clock}${esc(r.time)}</span>` : ''}
         ${base ? `<span class="pill">выход: ${fmtAmount(base)} ${esc(unit)}${pBase ? ` по ${fmtAmount(pBase)} ${esc(pUnit)}` : ''}</span>` : ''}
+      </div>
+      <div class="quick">
+        <button type="button" class="btn" data-act="start-cook">${Icons.play} ${running ? 'Продолжить готовить' : 'Начать готовить'}</button>
+        <button type="button" class="btn ghost" data-act="cost">${Icons.coin} Себестоимость</button>
       </div>
 
       <section class="block">
@@ -386,8 +403,9 @@ async function viewRecipe(id) {
       </section>
 
       ${r.inventory ? `<section class="block"><h2 class="block-title">инвентарь</h2><ul class="inv">${r.inventory.split('\n').map((l) => l.replace(/^\s*[•·*-]\s*/, '').trim()).filter(Boolean).map((l) => `<li>${esc(l)}</li>`).join('')}</ul></section>` : ''}
-      ${r.steps ? `<section class="block"><h2 class="block-title">технология</h2>${stepsHTML(r.steps)}</section>` : ''}
+      ${getSteps(r).length ? `<section class="block"><h2 class="block-title">технология</h2><a class="btn small ghost big-steps" href="#/recipe/${r.id}/cook">${Icons.play} Крупно, по шагам</a>${stepsViewHTML(r)}</section>` : ''}
       ${r.notes ? `<section class="block"><div class="paper-note">${Doodles.pencil()}<p>${nl2br(r.notes)}</p></div></section>` : ''}
+      ${history}
       ${r.source ? `<p class="source">Источник: ${/^https?:\/\//.test(r.source) ? `<a href="${esc(r.source)}" target="_blank" rel="noopener">${esc(r.source)}</a>` : esc(r.source)}</p>` : ''}
 
       <div class="actions">
@@ -420,6 +438,8 @@ async function viewRecipe(id) {
       if (!act) return;
       if (act.dataset.act === 'fav') { r.fav = !r.fav; r.updated = Date.now(); await DB.put('recipes', r); toast(r.fav ? 'Добавлено в избранное' : 'Убрано из избранного'); rerender(); }
       if (act.dataset.act === 'to-menu') addToMenuSheet(r);
+      if (act.dataset.act === 'start-cook') startSessionSheet(r);
+      if (act.dataset.act === 'cost') costSheet(r, st.k || 1, base ? st.target : null);
       if (act.dataset.act === 'delete') {
         if (!(await ask(`Удалить рецепт «${r.title}»? Он пропадёт и из меню.`))) return;
         await deleteRecipe(r);
@@ -432,7 +452,9 @@ async function viewRecipe(id) {
 }
 
 async function deleteRecipe(r) {
-  await Photos.removeMany(r.photos || []);
+  await Photos.removeMany([...(r.photos || []), ...stepPhotoIds(r)]);
+  for (const x of await recipeSessions(r.id)) { await Photos.removeMany(x.photos || []); await DB.del('sessions', x.id); }
+  await Timers.loadSessions();
   await DB.del('recipes', r.id);
   for (const day of await DB.all('menu')) {
     const items = day.items.filter((it) => it.recipeId !== r.id);
@@ -487,7 +509,19 @@ async function viewRecipeEdit(id) {
       <datalist id="unitList"><option value="г"><option value="кг"><option value="мл"><option value="л"><option value="шт"><option value="ст.л."><option value="ч.л."><option value="стакан"><option value="щепотка"><option value="по вкусу"></datalist>
 
       <label class="field"><span>Инвентарь <i>(необязательно)</i></span><textarea name="inventory" rows="3" placeholder="Миксер&#10;Сотейник с толстым дном">${esc(v.inventory)}</textarea></label>
-      <label class="field"><span>Технология приготовления</span><textarea name="steps" rows="10" placeholder="Каждый шаг — с новой строки.&#10;Строка с двоеточием в конце станет заголовком: «Крем:»">${esc(v.steps)}</textarea></label>
+      <div class="field"><span>Технология приготовления</span>
+        <div class="step-editor" id="stepRows"></div>
+        <div class="ing-tools" id="stepTools">
+          <button type="button" class="btn small ghost" data-step-add="step">${Icons.plus} шаг</button>
+          <button type="button" class="btn small ghost" data-step-add="group">${Icons.plus} этап</button>
+          <button type="button" class="btn small ghost" data-step-add="paste">Вставить текстом</button>
+        </div>
+        <div id="stepPasteBox" hidden>
+          <textarea name="steps" rows="10" placeholder="Каждый шаг — с новой строки.&#10;Строка с двоеточием в конце станет этапом: «Крем:»">${esc(v.steps)}</textarea>
+          <button type="button" class="btn small" data-step-rows style="margin-top:8px">Готово — показать по шагам</button>
+        </div>
+        <p class="hint" style="margin-top:8px">К каждому шагу можно приложить фото. Если в шаге есть время («выпекать 20 минут»), в рецепте появится кнопка таймера.</p>
+      </div>
       <label class="field"><span>Заметки</span><textarea name="notes" rows="3" placeholder="Что получилось, что поменять в следующий раз">${esc(v.notes)}</textarea></label>
       <label class="field"><span>Источник</span><input name="source" value="${esc(v.source)}" placeholder="Курс, книга или ссылка"></label>
       <label class="check"><input type="checkbox" name="fav" ${v.fav ? 'checked' : ''}><span>${Icons.star} В избранное</span></label>
@@ -501,6 +535,7 @@ async function viewRecipeEdit(id) {
   const bind = (root) => {
     const form = $('#recipeForm', root);
     activeEditor = new PhotoEditor($('#photoBox', root), v.photos || []);
+    stepEditor = new StepEditor($('#stepRows', root), $('#stepPasteBox', root), $('#stepTools', root), getSteps(v));
     const ta = form.elements.ingredients;
     const rowsBox = $('#ingRows', root);
     const pasteBox = $('#ingPasteBox', root);
@@ -582,15 +617,18 @@ async function viewRecipeEdit(id) {
         portionSize: f.portionSize.value ? parseFloat(f.portionSize.value.replace(',', '.')) : '',
         portionUnit: f.portionUnit.value.trim() || 'мл',
         inventory: f.inventory.value.trim(),
-        steps: f.steps.value.trim(),
+        stepItems: stepEditor.read(),
+        steps: '',
         notes: f.notes.value.trim(),
         source: f.source.value.trim(),
         fav: f.fav.checked,
         photos: activeEditor.ids,
         updated: Date.now()
       };
+      rec.steps = stepsToText(rec.stepItems);
       await DB.put('recipes', rec);
       await activeEditor.commit();
+      await stepEditor.commit();
       activeEditor = null;
       delete state.scale[rec.id];
       toast('Сохранено');
@@ -795,22 +833,57 @@ async function shoppingSheet(dates, rmap) {
       sources.push({ groups: parseIngredients(r.ingredients), k, from: r.title });
     }
   }
-  showShoppingList(sources, free, 'Сложены одинаковые продукты из всех блюд недели с учётом порций.');
+  showShoppingList(sources, free, 'Сложены одинаковые продукты из всех блюд недели с учётом порций.', 'week:' + dates[0]);
 }
 
-function showShoppingList(sources, free, note) {
+async function showShoppingList(sources, free, note, listKey = 'default') {
   const list = sumIngredients(sources);
-  const line = (e) => `${e.name}${e.amount != null ? ` — ${fmtAmount(e.amount)} ${e.unit}` : ''}`;
-  const text = list.map(line).join('\n') + (free.length ? `\n\nБез рецепта: ${free.join(', ')}` : '');
+  const stKey = 'shop:' + listKey;
+  const st = (await DB.get('shopstate', stKey)) || { key: stKey, checked: [], home: [] };
+  const save = () => DB.put('shopstate', st);
+  const qty = (e) => (e.amount != null ? fmtQty(e.amount, e.unit) : '');
+  const row = (e, home) => `<li data-k="${esc(e.key)}" class="${home ? 'at-home' : ''}">
+      <label><input type="checkbox" ${st.checked.includes(e.key) ? 'checked' : ''} ${home ? 'disabled' : ''}><span class="shop-n">${esc(e.name)}</span><span class="shop-a">${esc(qty(e))}</span></label>
+      <button type="button" class="shop-home" data-home="${esc(e.key)}" aria-label="${home ? 'Вернуть в список' : 'Есть дома'}">${home ? Icons.cart : Icons.home}</button>
+    </li>`;
+  const draw = (s) => {
+    const buy = list.filter((e) => !st.home.includes(e.key));
+    const have = list.filter((e) => st.home.includes(e.key));
+    $('#shopBody', s).innerHTML = `
+      ${buy.length ? `<ul class="shop">${buy.map((e) => row(e, false)).join('')}</ul>` : '<p class="muted">Всё уже есть дома — покупать ничего не нужно.</p>'}
+      ${have.length ? `<p class="pick-label">Есть дома (${have.length})</p><ul class="shop home-list">${have.map((e) => row(e, true)).join('')}</ul>` : ''}
+      ${free.length ? `<p class="muted small">Без рецепта: ${esc(free.join(', '))}</p>` : ''}`;
+  };
   const html = `<h3 class="sheet-title">Список покупок</h3>
-    <p class="muted small">${esc(note)}</p>
-    ${list.length ? `<ul class="shop">${list.map((e, i) => `<li><label><input type="checkbox"><span class="shop-n">${esc(e.name)}</span><span class="shop-a">${e.amount != null ? `${fmtAmount(e.amount)} ${esc(e.unit)}` : ''}</span></label></li>`).join('')}</ul>` : '<p class="muted">В рецептах нет ингредиентов.</p>'}
-    ${free.length ? `<p class="muted small">Без рецепта: ${esc(free.join(', '))}</p>` : ''}
-    <div class="row-btns"><button class="btn ghost" data-close>Закрыть</button><button class="btn" data-copy>${Icons.copy} Скопировать</button></div>`;
+    <p class="muted small">${esc(note)} Нажми ${Icons.home.replace('class="ic"', 'class="ic inline"')}, если продукт уже есть дома. Отметки сохраняются.</p>
+    <div id="shopBody">${list.length ? '' : '<p class="muted">В рецептах нет ингредиентов.</p>'}</div>
+    <div class="row-btns"><button class="btn ghost" data-reset>Сбросить отметки</button><button class="btn" data-copy>${Icons.copy} Скопировать</button></div>`;
   openSheet(html, (s) => {
+    if (list.length) draw(s);
+    s.addEventListener('change', (e) => {
+      const li = e.target.closest('li[data-k]');
+      if (!li || e.target.type !== 'checkbox') return;
+      const k = li.dataset.k;
+      st.checked = st.checked.filter((x) => x !== k);
+      if (e.target.checked) st.checked.push(k);
+      save();
+    });
+    s.addEventListener('click', (e) => {
+      const hb = e.target.closest('[data-home]');
+      if (hb) {
+        const k = hb.dataset.home;
+        if (st.home.includes(k)) st.home = st.home.filter((x) => x !== k);
+        else { st.home.push(k); st.checked = st.checked.filter((x) => x !== k); }
+        save();
+        draw(s);
+      }
+    });
+    $('[data-reset]', s).onclick = () => { st.checked = []; st.home = []; save(); draw(s); toast('Отметки сброшены'); };
     $('[data-copy]', s).onclick = async () => {
-      try { await navigator.clipboard.writeText(text); toast('Список скопирован'); }
-      catch (e) { if (navigator.share) navigator.share({ text }).catch(() => {}); }
+      const buy = list.filter((e) => !st.home.includes(e.key) && !st.checked.includes(e.key));
+      const text = buy.map((e) => `${e.name}${e.amount != null ? ' — ' + qty(e) : ''}`).join('\n') + (free.length ? `\n\nБез рецепта: ${free.join(', ')}` : '');
+      try { await navigator.clipboard.writeText(text); toast('Скопировано то, что осталось купить'); }
+      catch (err) { if (navigator.share) navigator.share({ text }).catch(() => {}); }
     };
   });
 }
@@ -1074,6 +1147,12 @@ async function viewSettings() {
     </section>`}
 
     <section class="card">
+      <h2 class="card-title">Цены продуктов</h2>
+      <p class="muted">Цены, которые ты вводила в «Себестоимости». Здесь их можно посмотреть и удалить.</p>
+      <button class="btn ghost wide" data-act="prices">${Icons.coin} Открыть цены</button>
+    </section>
+
+    <section class="card">
       <h2 class="card-title">Удаление</h2>
       <button class="btn ghost danger-text wide" data-act="wipe">${Icons.trash} Удалить все данные</button>
     </section>
@@ -1086,10 +1165,12 @@ async function viewSettings() {
       const a = act.dataset.act;
       if (a === 'check-update') { act.disabled = true; await Updater.check(false); act.disabled = false; }
       if (a === 'backup') backupSheet();
+      if (a === 'prices') pricesSheet();
       if (a === 'wipe') {
         if (!(await ask('Удалить все рецепты, находки, места, праздники, заметки, меню и фото из телефона? Вернуть можно только из резервной копии.', 'Да, удалить'))) return;
         if (!(await ask('Точно? Это действие нельзя отменить.', 'Удалить всё'))) return;
-        for (const s of ['recipes', 'finds', 'notes', 'menu', 'photos', 'places', 'holidays']) await DB.clear(s);
+        for (const s of ['recipes', 'finds', 'notes', 'menu', 'photos', 'places', 'holidays', 'prices', 'shopstate', 'sessions']) await DB.clear(s);
+        await Timers.loadSessions();
         Photos.resetCache();
         toast('Все данные удалены');
         rerender();
@@ -1152,6 +1233,8 @@ const routes = [
   [/^#\/recipes$/, () => viewRecipes(), 'recipes', 'recipes'],
   [/^#\/recipe\/new$/, () => viewRecipeEdit(null), 'recipes', 'recipe-edit'],
   [/^#\/recipe\/(\w+)\/edit$/, (m) => viewRecipeEdit(m[1]), 'recipes', 'recipe-edit'],
+  [/^#\/recipe\/(\w+)\/cook$/, (m) => viewCook(m[1]), 'recipes'],
+  [/^#\/session\/(\w+)$/, (m) => viewSession(m[1]), 'recipes', 'session'],
   [/^#\/recipe\/(\w+)$/, (m) => viewRecipe(m[1]), 'recipes', 'recipe'],
   [/^#\/finds$/, () => viewFinds(), 'finds', 'finds'],
   [/^#\/find\/new$/, () => viewFindEdit(null), 'finds'],
@@ -1191,6 +1274,8 @@ let _renderSeq = 0;
 async function render() {
   const hash = location.hash || '#/recipes';
   if (activeEditor) { const ed = activeEditor; activeEditor = null; ed.cancel(); }
+  if (stepEditor) { const se = stepEditor; stepEditor = null; se.cancel(); }
+  if (viewCleanup) { try { viewCleanup(); } catch (e) { /* */ } viewCleanup = null; }
   const found = routes.find(([re]) => re.test(hash));
   if (!found) { location.replace('#/recipes'); return; }
   const seq = ++_renderSeq;
@@ -1205,8 +1290,10 @@ async function render() {
   page.innerHTML = res.html;
   $('#app').replaceChildren(page);
   drawTabbar(tab);
+  Timers.render();
   page.addEventListener('click', globalClicks);
   if (res.bind) res.bind(page);
+  if (res.cleanup) viewCleanup = res.cleanup;
   Photos.hydrate(page);
   if (screen) {
     const anchor = $('.segnav', page) || $('.page-head', page) || $('.meta-row', page) || $('.form-title', page);
@@ -1232,6 +1319,7 @@ window.addEventListener('hashchange', render);
 (async function start() {
   try { if (navigator.storage && navigator.storage.persist) await navigator.storage.persist(); } catch (e) { /* */ }
   if (!location.hash) history.replaceState(null, '', '#/recipes');
+  Timers.load();
   let added = 0;
   try { added = await addStarterRecipes(); } catch (e) { console.warn(e); }
   try { await migrateRecipes(); } catch (e) { console.warn(e); }

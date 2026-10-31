@@ -1,6 +1,6 @@
 'use strict';
 // Резервная копия: один файл .json со всеми рецептами, заметками, меню и фотографиями.
-const BACKUP_STORES = ['recipes', 'finds', 'notes', 'menu', 'places', 'holidays'];
+const BACKUP_STORES = ['recipes', 'finds', 'notes', 'menu', 'places', 'holidays', 'prices', 'shopstate', 'sessions'];
 
 function blobToDataURL(blob) {
   return new Promise((resolve, reject) => {
