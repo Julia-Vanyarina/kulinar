@@ -1379,6 +1379,7 @@ window.addEventListener('hashchange', render);
   let added = 0;
   try { added = await addStarterRecipes(); } catch (e) { console.warn(e); }
   try { await migrateRecipes(); } catch (e) { console.warn(e); }
+  try { added += await addBanoffeeParty(); } catch (e) { console.warn(e); }
   await render();
   if (added) toast(`В тетрадь добавлено ${added} ${plural(added, 'рецепт', 'рецепта', 'рецептов')}`);
   Updater.init();

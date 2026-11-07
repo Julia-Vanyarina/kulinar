@@ -25,6 +25,8 @@ const TIME_RE = /(\d+(?:[.,]\d+)?)(?:\s*[–-]\s*(\d+(?:[.,]\d+)?))?\s*(ч(?:а�
 function findTimes(text) {
   const out = [];
   for (const m of String(text).matchAll(TIME_RE)) {
+    // «перемешивать каждые 3–4 минуты» — это не таймер
+    if (/кажд[а-я]*\s*$/i.test(String(text).slice(Math.max(0, m.index - 12), m.index))) continue;
     const a = parseFloat(m[1].replace(',', '.'));
     const u = m[3].toLowerCase();
     const mult = u.startsWith('ч') ? 3600 : u.startsWith('м') ? 60 : 1;
